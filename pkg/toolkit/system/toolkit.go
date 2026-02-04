@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
-	"github.com/darkostanimirovic/meanwhile/pkg/toolkit"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/toolkit"
 )
 
 // Config controls system tool guardrails.

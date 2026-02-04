@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/telemetry"
+	"github.com/runmeanwhile/meanwhile/pkg/telemetry"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

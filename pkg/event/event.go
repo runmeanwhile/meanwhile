@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
 // Type represents an event type string.

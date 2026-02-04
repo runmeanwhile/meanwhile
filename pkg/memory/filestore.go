@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 // FileChatStore stores events in JSONL files, one file per session.

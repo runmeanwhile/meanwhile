@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 )
 
 func TestNewSessionRejectsDuplicateParticipantNames(t *testing.T) {

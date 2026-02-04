@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/mcp"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
-	"github.com/darkostanimirovic/meanwhile/pkg/toolkit"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/mcp"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/toolkit"
 )
 
 // SessionBuilder provides a fluent API for creating sessions.

@@ -3,7 +3,7 @@ package toolkit
 import (
 	"context"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
 // Static bundles tools that are already constructed.

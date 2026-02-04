@@ -6,15 +6,15 @@ import (
 	"log"
 	"os"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/engine"
-	"github.com/darkostanimirovic/meanwhile/pkg/hook"
-	"github.com/darkostanimirovic/meanwhile/pkg/logger"
-	"github.com/darkostanimirovic/meanwhile/pkg/memory"
-	"github.com/darkostanimirovic/meanwhile/pkg/message"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol/consensus"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider/openai"
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/engine"
+	"github.com/runmeanwhile/meanwhile/pkg/hook"
+	"github.com/runmeanwhile/meanwhile/pkg/logger"
+	"github.com/runmeanwhile/meanwhile/pkg/memory"
+	"github.com/runmeanwhile/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol/consensus"
+	"github.com/runmeanwhile/meanwhile/pkg/provider/openai"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
 // ToolArgs for various workplace tools

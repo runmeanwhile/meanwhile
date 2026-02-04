@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 func TestFormatThreadPreservesContent(t *testing.T) {

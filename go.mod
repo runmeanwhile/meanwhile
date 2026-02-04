@@ -1,4 +1,4 @@
-module github.com/darkostanimirovic/meanwhile
+module github.com/runmeanwhile/meanwhile
 
 go 1.24.0
 

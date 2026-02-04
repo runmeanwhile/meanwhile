@@ -1,11 +1,11 @@
 package engine
 
 import (
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/config"
-	"github.com/darkostanimirovic/meanwhile/pkg/contextpolicy"
-	"github.com/darkostanimirovic/meanwhile/pkg/message"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/config"
+	"github.com/runmeanwhile/meanwhile/pkg/contextpolicy"
+	"github.com/runmeanwhile/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 )
 
 type resolvedContextConfig struct {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 // TurnResume resumes a paused human turn with the provided response.

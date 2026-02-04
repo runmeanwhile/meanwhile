@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/config"
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
-	"github.com/darkostanimirovic/meanwhile/pkg/memory"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/config"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/memory"
+	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
 
 const (

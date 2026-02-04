@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/chair"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/chair"
 )
 
 // InterjectionInput captures context for a chair interjection.

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 const (

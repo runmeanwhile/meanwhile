@@ -3,7 +3,7 @@ package engine
 import (
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 // HumanParticipant represents a real human participant in a session.

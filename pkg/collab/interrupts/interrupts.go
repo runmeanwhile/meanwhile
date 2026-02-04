@@ -1,8 +1,8 @@
 package interrupts
 
 import (
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/hook"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/hook"
 )
 
 // Interrupt is a collaboration-kit alias of hook.Interrupt.

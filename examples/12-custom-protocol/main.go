@@ -6,13 +6,13 @@ import (
 	"log"
 	"os"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/engine"
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
-	"github.com/darkostanimirovic/meanwhile/pkg/logger"
-	"github.com/darkostanimirovic/meanwhile/pkg/message"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider/openai"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/engine"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/logger"
+	"github.com/runmeanwhile/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/provider/openai"
 )
 
 // RoundRobinProtocol rotates through participants sequentially

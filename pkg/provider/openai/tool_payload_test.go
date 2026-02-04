@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider"
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
 func TestBuildRequestPayloadUsesObjectSchema(t *testing.T) {

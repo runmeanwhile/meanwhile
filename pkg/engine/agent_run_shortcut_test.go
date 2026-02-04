@@ -3,8 +3,8 @@ package engine
 import (
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/message"
 )
 
 func TestAgentBuilderRun(t *testing.T) {

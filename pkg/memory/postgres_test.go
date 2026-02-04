@@ -11,7 +11,7 @@ import (
 
 	_ "github.com/lib/pq" // PostgreSQL driver
 
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 // getTestDBURL returns a PostgreSQL connection string for testing.

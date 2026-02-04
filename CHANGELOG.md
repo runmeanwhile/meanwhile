@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request registry drivers (in-memory + Redis) for mapping request IDs to sessions.
 - Timeout scheduling with pluggable scheduler drivers (in-memory + Redis) and default timeout policies.
 
+### CLI
+
+### Studio
+
+### Studio Enterprise
+
 ## [0.1.0] - 2026-01-19
 
 ### Runtime
@@ -124,5 +130,5 @@ This is the first release - no migration needed!
 
 ## Release Links
 
-[Unreleased]: https://github.com/darkostanimirovic/meanwhile/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/darkostanimirovic/meanwhile/releases/tag/v0.1.0
+[Unreleased]: https://github.com/runmeanwhile/meanwhile/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/runmeanwhile/meanwhile/releases/tag/v0.1.0

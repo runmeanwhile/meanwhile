@@ -16,10 +16,10 @@ The Meanwhile team takes security issues seriously. We appreciate your efforts t
 
 Instead, please report security vulnerabilities by:
 
-1. **Email**: Send details to darkostanimirovic \[at\] gmail \[dot\] com with the subject line "Meanwhile Security Vulnerability"
+1. **Email**: Send details to security@runmeanwhile.com with the subject line "Meanwhile Security Vulnerability"
 
 2. **Private Security Advisory**: Use GitHub's private security advisory feature at:
-   https://github.com/darkostanimirovic/meanwhile/security/advisories/new
+   https://github.com/runmeanwhile/meanwhile/security/advisories/new
 
 ### What to Include
 

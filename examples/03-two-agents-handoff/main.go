@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/engine"
-	"github.com/darkostanimirovic/meanwhile/pkg/message"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider/openai"
+	"github.com/runmeanwhile/meanwhile/pkg/engine"
+	"github.com/runmeanwhile/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/provider/openai"
 )
 
 func main() {

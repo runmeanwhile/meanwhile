@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/message"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol/consensus"
+	"github.com/runmeanwhile/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol/consensus"
 )
 
 func TestSessionBuilder(t *testing.T) {

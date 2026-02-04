@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/scheduler"
+	"github.com/runmeanwhile/meanwhile/pkg/scheduler"
 )
 
 const (

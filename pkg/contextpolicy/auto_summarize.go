@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 // AutoSummarizeConfig controls automatic summarization thresholds.

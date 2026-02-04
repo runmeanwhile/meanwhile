@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 // HandleTimeout resolves a pending request timeout by session ID.

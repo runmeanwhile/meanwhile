@@ -9,15 +9,15 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/config"
-	"github.com/darkostanimirovic/meanwhile/pkg/contextpolicy"
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
-	"github.com/darkostanimirovic/meanwhile/pkg/hook"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider"
-	"github.com/darkostanimirovic/meanwhile/pkg/telemetry"
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/config"
+	"github.com/runmeanwhile/meanwhile/pkg/contextpolicy"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/hook"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/telemetry"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
 var (

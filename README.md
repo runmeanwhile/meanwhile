@@ -1,6 +1,6 @@
 # Meanwhile
 
-Meanwhile is a Go framework for multi-agent collaboration patterns. It's not a task pipeline—it's a workplace. Instead of asking "which agent runs next?", it asks "what kind of collaboration is happening right now?".
+Meanwhile is a collaboration runtime for AI agents. It's not a task pipeline—it's a workplace. Instead of asking "which agent runs next?", it asks "what kind of collaboration is happening right now?".
 
 The core is intentionally minimal. Collaboration modes live in **protocols** that can evolve independently of the engine, with hook points for dynamic control.
 
@@ -43,10 +43,10 @@ import (
     "log"
     "os"
 
-    "github.com/darkostanimirovic/meanwhile/pkg/engine"
-    "github.com/darkostanimirovic/meanwhile/pkg/logger"
-    "github.com/darkostanimirovic/meanwhile/pkg/message"
-    "github.com/darkostanimirovic/meanwhile/pkg/provider/openai"
+    "github.com/runmeanwhile/meanwhile/pkg/engine"
+    "github.com/runmeanwhile/meanwhile/pkg/logger"
+    "github.com/runmeanwhile/meanwhile/pkg/message"
+    "github.com/runmeanwhile/meanwhile/pkg/provider/openai"
 )
 
 func main() {

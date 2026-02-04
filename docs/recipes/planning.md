@@ -5,7 +5,7 @@ The planning primitive creates structured implementation plans using a planning 
 ## Basic Usage
 
 ```go
-import "github.com/darkostanimirovic/meanwhile/pkg/collab/planning"
+import "github.com/runmeanwhile/meanwhile/pkg/collab/planning"
 
 // Create planner
 planner := planning.New(planningAgent)

@@ -7,8 +7,8 @@ This plan covers all changes needed to transition Meanwhile from a personal MIT-
 ## 1. GitHub Organization & Module Path
 
 ### Current
-- Repo: `github.com/darkostanimirovic/meanwhile`
-- Module: `github.com/darkostanimirovic/meanwhile`
+- Repo: `github.com/runmeanwhile/meanwhile`
+- Module: `github.com/runmeanwhile/meanwhile`
 
 ### Target
 - Org: `github.com/runmeanwhile` (may rename to `meanwhile` if acquired)
@@ -50,7 +50,7 @@ studio/**/*.go        - future files
 ### go.mod Change
 ```go
 // Before
-module github.com/darkostanimirovic/meanwhile
+module github.com/runmeanwhile/meanwhile
 
 // After
 module github.com/runmeanwhile/meanwhile
@@ -571,8 +571,8 @@ meanwhile-studio:0.2.0  (Docker image)
 
 | Area | Current | Target |
 |------|---------|--------|
-| **Org** | `darkostanimirovic` | `runmeanwhile` (may rename to `meanwhile` later) |
-| **Module** | `github.com/darkostanimirovic/meanwhile` | `github.com/runmeanwhile/meanwhile` |
+| **Org** | `runmeanwhile` | `runmeanwhile` (may rename to `meanwhile` later) |
+| **Module** | `github.com/runmeanwhile/meanwhile` | `github.com/runmeanwhile/meanwhile` |
 | **License** | MIT | Apache 2.0 (runtime, CLI, studio OSS) + Proprietary (ee/) |
 | **Domain** | none | `runmeanwhile.com` |
 | **Tagline** | "multi-agent framework" | "collaboration runtime for AI agents" |

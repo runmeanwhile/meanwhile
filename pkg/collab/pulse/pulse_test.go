@@ -3,7 +3,7 @@ package pulse
 import (
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 func TestPulseCheckInitialPositions(t *testing.T) {

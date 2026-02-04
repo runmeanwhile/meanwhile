@@ -3,7 +3,7 @@ package toolkit
 import (
 	"context"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
 // Toolkit represents a bundle of tools.

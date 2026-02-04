@@ -47,7 +47,7 @@ This event-centric approach enables rich observability and future features like 
 ### 1. Choose a Storage Backend
 
 ```go
-import "github.com/darkostanimirovic/meanwhile/pkg/memory"
+import "github.com/runmeanwhile/meanwhile/pkg/memory"
 
 // Option A: In-memory (for testing, lost on restart)
 memStore := memory.NewInMemoryStore()
@@ -694,7 +694,7 @@ fmt.Printf("Total: %d, By type: %v\n", stats.TotalEvents, stats.EventCounts)
 - [Example 16 - Memory Automation](../../examples/16-memory-automation/)
 - [Architecture Documentation](./architecture.md)
 - [Event Types Reference](./observability.md)
-- [API Documentation](https://pkg.go.dev/github.com/darkostanimirovic/meanwhile/pkg/memory)
+- [API Documentation](https://pkg.go.dev/github.com/runmeanwhile/meanwhile/pkg/memory)
 
 ---
 

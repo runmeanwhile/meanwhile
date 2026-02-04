@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/darkostanimirovic/meanwhile/pkg/mcp"
+import "github.com/runmeanwhile/meanwhile/pkg/mcp"
 
 // MCP creates a builder for connecting to an MCP server.
 func (e *Engine) MCP(name string) *mcp.Builder {

@@ -88,7 +88,7 @@ func (Round) Shutdown(ctx context.Context, sess protocol.Session) error { return
 Meanwhile ships with several ready-to-use collaboration protocols in `pkg/protocol/`:
 
 ```go
-import "github.com/darkostanimirovic/meanwhile/pkg/protocol"
+import "github.com/runmeanwhile/meanwhile/pkg/protocol"
 
 // Brainstorming - diverge, interact, and vote like a real brainstorm
 brainstorm := protocol.Brainstorming()

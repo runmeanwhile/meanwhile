@@ -1,11 +1,11 @@
 package consensus
 
 import (
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/agenda"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/chair"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/pulse"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/roundtable"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/agenda"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/chair"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/pulse"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/roundtable"
 )
 
 // ContextMessageBuilder builds a context message for participants.

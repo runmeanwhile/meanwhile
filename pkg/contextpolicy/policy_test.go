@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 func TestDefaultPolicyNoop(t *testing.T) {

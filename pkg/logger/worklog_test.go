@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 func TestWorklogBasicFormatting(t *testing.T) {

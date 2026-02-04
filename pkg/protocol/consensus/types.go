@@ -1,8 +1,8 @@
 package consensus
 
 import (
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/pulse"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/pulse"
 )
 
 // Position represents an agent's stance on the consensus topic.

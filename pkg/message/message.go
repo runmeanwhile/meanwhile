@@ -1,6 +1,6 @@
 package message
 
-import "github.com/darkostanimirovic/meanwhile/pkg/agent"
+import "github.com/runmeanwhile/meanwhile/pkg/agent"
 
 // System constructs a system message.
 func System(content string) agent.Message {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 func TestSemanticStore_AppendAndQuery(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 // PostgresStore implements Store using PostgreSQL for persistent, scalable event storage.

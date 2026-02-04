@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/darkostanimirovic/meanwhile/pkg/tool"
+import "github.com/runmeanwhile/meanwhile/pkg/tool"
 
 // ToolRunState captures pending tool execution for persistence.
 type ToolRunState struct {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/engine"
+	"github.com/runmeanwhile/meanwhile/pkg/engine"
 )
 
 const defaultInboxLimit = 100

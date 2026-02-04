@@ -3,7 +3,7 @@ package engine
 import (
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 // HumanRequest captures a human input request emitted by ask_human.

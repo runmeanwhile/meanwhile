@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/roundtable"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/roundtable"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 )
 
 const defaultRounds = 1

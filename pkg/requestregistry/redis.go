@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/engine"
+	"github.com/runmeanwhile/meanwhile/pkg/engine"
 	"github.com/redis/go-redis/v9"
 )
 

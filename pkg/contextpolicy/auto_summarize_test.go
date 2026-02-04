@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 func TestAutoSummarizePolicy_SummarizesWhenThresholdExceeded(t *testing.T) {

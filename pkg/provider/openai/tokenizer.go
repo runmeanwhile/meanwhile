@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 	tiktoken "github.com/weaviate/tiktoken-go"
 )
 

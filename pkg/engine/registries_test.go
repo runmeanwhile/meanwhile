@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 )
 
 func TestEngineProviderRegistry(t *testing.T) {

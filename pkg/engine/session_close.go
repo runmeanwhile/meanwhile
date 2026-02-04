@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/hook"
+	"github.com/runmeanwhile/meanwhile/pkg/hook"
 )
 
 // CloseSession shuts down and removes a session.

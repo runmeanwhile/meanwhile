@@ -9,11 +9,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/engine"
-	"github.com/darkostanimirovic/meanwhile/pkg/logger"
-	"github.com/darkostanimirovic/meanwhile/pkg/message"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol/consensus"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider/openai"
+	"github.com/runmeanwhile/meanwhile/pkg/engine"
+	"github.com/runmeanwhile/meanwhile/pkg/logger"
+	"github.com/runmeanwhile/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol/consensus"
+	"github.com/runmeanwhile/meanwhile/pkg/provider/openai"
 )
 
 func main() {

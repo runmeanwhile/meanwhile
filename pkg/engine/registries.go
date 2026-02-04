@@ -3,14 +3,14 @@ package engine
 import (
 	"fmt"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/hook"
-	"github.com/darkostanimirovic/meanwhile/pkg/integration"
-	"github.com/darkostanimirovic/meanwhile/pkg/mcp"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider"
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
-	"github.com/darkostanimirovic/meanwhile/pkg/toolkit"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/hook"
+	"github.com/runmeanwhile/meanwhile/pkg/integration"
+	"github.com/runmeanwhile/meanwhile/pkg/mcp"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/toolkit"
 )
 
 // ProviderRegistry returns the provider registry.

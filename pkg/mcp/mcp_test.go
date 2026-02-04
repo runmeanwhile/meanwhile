@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/engine"
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/engine"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

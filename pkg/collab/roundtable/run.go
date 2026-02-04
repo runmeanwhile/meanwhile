@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 // Turn represents a single agent turn request.

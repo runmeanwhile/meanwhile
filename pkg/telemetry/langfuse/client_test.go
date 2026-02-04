@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/telemetry"
+	"github.com/runmeanwhile/meanwhile/pkg/telemetry"
 )
 
 func TestLangfuseClientSendsTraces(t *testing.T) {

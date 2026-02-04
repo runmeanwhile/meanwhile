@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 // Policy selects which messages are sent to the provider.

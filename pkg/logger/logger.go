@@ -6,7 +6,7 @@
 package logger
 
 import (
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 // Logger formats and outputs events from Meanwhile sessions.

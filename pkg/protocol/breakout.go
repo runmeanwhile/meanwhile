@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/minutes"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/roundtable"
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/minutes"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/roundtable"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 type breakout struct {

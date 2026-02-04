@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/config"
-	"github.com/darkostanimirovic/meanwhile/pkg/contextpolicy"
+	"github.com/runmeanwhile/meanwhile/pkg/config"
+	"github.com/runmeanwhile/meanwhile/pkg/contextpolicy"
 )
 
 func TestApplyConfigDurabilitySettings(t *testing.T) {

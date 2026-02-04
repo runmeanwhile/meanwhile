@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/config"
+	"github.com/runmeanwhile/meanwhile/pkg/config"
 )
 
 // Factory builds a Provider from configuration.

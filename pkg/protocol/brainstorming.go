@@ -9,11 +9,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/minutes"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/roundtable"
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
-	"github.com/darkostanimirovic/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/minutes"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/roundtable"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/message"
 )
 
 var errBrainstormNoParticipants = errors.New("brainstorming requires at least one participant")

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 func TestInMemoryStoreAppendQuery(t *testing.T) {

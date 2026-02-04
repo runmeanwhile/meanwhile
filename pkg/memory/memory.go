@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 // Store defines memory storage behavior.

@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 // TypedTool wraps a typed function as a Tool.

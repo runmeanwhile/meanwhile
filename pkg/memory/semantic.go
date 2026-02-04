@@ -7,8 +7,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 // SemanticStore provides semantic memory storage with embedding-based retrieval.

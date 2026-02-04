@@ -3,7 +3,7 @@ package protocol
 import (
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 // PromptWithMedia wraps a text prompt with any non-text content parts from the source message.

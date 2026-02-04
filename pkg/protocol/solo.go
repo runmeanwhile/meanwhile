@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
 )
 
 // Solo runs a single agent for each incoming message.

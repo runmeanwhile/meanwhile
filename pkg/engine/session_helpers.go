@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 )
 
 func validateGroups(participants []protocol.Participant, groups map[string][]protocol.Participant) error {

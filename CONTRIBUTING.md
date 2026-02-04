@@ -43,7 +43,7 @@ Meanwhile is built on carefully considered design patterns and architectural dec
 
 ```bash
 # Clone the repository
-git clone https://github.com/darkostanimirovic/meanwhile.git
+git clone https://github.com/runmeanwhile/meanwhile.git
 cd meanwhile
 
 # Install dependencies
@@ -102,7 +102,7 @@ git clone https://github.com/YOUR-USERNAME/meanwhile.git
 cd meanwhile
 
 # Add upstream remote
-git remote add upstream https://github.com/darkostanimirovic/meanwhile.git
+git remote add upstream https://github.com/runmeanwhile/meanwhile.git
 
 # Create a feature branch
 git checkout -b feature/my-contribution

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
-	"github.com/darkostanimirovic/meanwhile/pkg/hook"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/hook"
 )
 
 // ErrStopBlocked indicates session shutdown was blocked by a hook.

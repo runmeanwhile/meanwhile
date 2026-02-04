@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/agenda"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/chair"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/minutes"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/pulse"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/roundtable"
-	"github.com/darkostanimirovic/meanwhile/pkg/event"
-	"github.com/darkostanimirovic/meanwhile/pkg/message"
-	"github.com/darkostanimirovic/meanwhile/pkg/protocol"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/agenda"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/chair"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/minutes"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/pulse"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/roundtable"
+	"github.com/runmeanwhile/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 )
 
 // consensus implements the consensus protocol.

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/config"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/config"
+	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
 
 func init() {

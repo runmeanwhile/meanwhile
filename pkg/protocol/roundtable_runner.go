@@ -3,8 +3,8 @@ package protocol
 import (
 	"context"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/collab/roundtable"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/collab/roundtable"
 )
 
 func roundtableRunner(sess Session) roundtable.Runner {

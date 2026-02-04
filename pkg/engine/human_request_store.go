@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 // HumanRequestStatus represents the lifecycle status of a human request.

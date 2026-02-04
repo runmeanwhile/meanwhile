@@ -3,8 +3,8 @@ package engine
 import (
 	"errors"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/tool"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
 func containsString(values []string, target string) bool {

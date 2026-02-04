@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/darkostanimirovic/meanwhile/pkg/tool"
+import "github.com/runmeanwhile/meanwhile/pkg/tool"
 
 func (s *Session) resolveToolPolicy(runPolicy tool.Policy) tool.Policy {
 	base, ok := s.ToolPolicy()

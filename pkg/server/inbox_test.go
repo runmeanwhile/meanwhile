@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/engine"
+	"github.com/runmeanwhile/meanwhile/pkg/engine"
 )
 
 func TestHumanRequestInboxHandler(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 type timeoutErr struct{}

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 )
 
 func TestInMemoryHumanRequestStoreCRUD(t *testing.T) {

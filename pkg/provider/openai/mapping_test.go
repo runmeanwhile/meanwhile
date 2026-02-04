@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/darkostanimirovic/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
 
 func TestDecodeEventOutputTextDelta(t *testing.T) {

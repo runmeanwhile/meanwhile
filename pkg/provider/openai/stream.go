@@ -8,8 +8,8 @@ import (
 )
 
 import (
-	"github.com/darkostanimirovic/meanwhile/pkg/agent"
-	"github.com/darkostanimirovic/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
 
 const doneToken = "[DONE]"

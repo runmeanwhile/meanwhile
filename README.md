@@ -1,5 +1,10 @@
 # Meanwhile
 
+[![CI](https://github.com/runmeanwhile/meanwhile/actions/workflows/ci.yml/badge.svg)](https://github.com/runmeanwhile/meanwhile/actions)
+[![Go Reference](https://pkg.go.dev/badge/github.com/runmeanwhile/meanwhile.svg)](https://pkg.go.dev/github.com/runmeanwhile/meanwhile)
+[![Go Report Card](https://goreportcard.com/badge/github.com/runmeanwhile/meanwhile)](https://goreportcard.com/report/github.com/runmeanwhile/meanwhile)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 Meanwhile is a collaboration runtime for AI agents. It's not a task pipeline—it's a workplace. Instead of asking "which agent runs next?", it asks "what kind of collaboration is happening right now?".
 
 The core is intentionally minimal. Collaboration modes live in **protocols** that can evolve independently of the engine, with hook points for dynamic control.
@@ -400,9 +405,11 @@ This repository targets **Go 1.24+**. Ensure Go 1.24 is in your PATH if multiple
 
 Meanwhile is licensed under the Apache License 2.0. See `LICENSE`.
 
-Enterprise-only features (in `studio/ee/`) are proprietary and require a commercial license.
-
 Meanwhile is a trademark of its owner. See `TRADEMARK.md` for usage guidance.
+
+## Future: CLI and Studio
+
+The roadmap includes a CLI for session management and a web-based Studio for visual collaboration. See [ROADMAP.md](ROADMAP.md) for details on planned features.
 
 ---
 

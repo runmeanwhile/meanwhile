@@ -13,11 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request registry drivers (in-memory + Redis) for mapping request IDs to sessions.
 - Timeout scheduling with pluggable scheduler drivers (in-memory + Redis) and default timeout policies.
 
-### CLI
-
-### Studio
-
-### Studio Enterprise
+### Future Additions
+- **CLI**: Command-line interface for session management (see [ROADMAP.md](ROADMAP.md))
+- **Studio**: Web-based UI for visual collaboration (see [ROADMAP.md](ROADMAP.md))
 
 ## [0.1.0] - 2026-01-19
 

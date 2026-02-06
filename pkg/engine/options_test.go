@@ -228,6 +228,27 @@ func TestWithLogger(t *testing.T) {
 	}
 }
 
+func TestWithAgentPerspectiveMode(t *testing.T) {
+	e := &Engine{}
+	opt := WithAgentPerspectiveMode(AgentPerspectiveLegacy)
+	if err := opt(e); err != nil {
+		t.Fatalf("WithAgentPerspectiveMode failed: %v", err)
+	}
+	if e.agentPerspectiveMode != AgentPerspectiveLegacy {
+		t.Fatalf("expected perspective mode %q, got %q", AgentPerspectiveLegacy, e.agentPerspectiveMode)
+	}
+}
+
+func TestEngineDefaultAgentPerspectiveMode(t *testing.T) {
+	e, err := New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	if e.agentPerspectiveMode != AgentPerspectiveSpeakerAware {
+		t.Fatalf("expected default perspective mode %q, got %q", AgentPerspectiveSpeakerAware, e.agentPerspectiveMode)
+	}
+}
+
 func TestWithProvider(t *testing.T) {
 	e := &Engine{
 		providers: provider.NewRegistry(),

@@ -57,6 +57,9 @@ type InteractionPromptInput struct {
 	Board      string
 	Round      int
 	MaxRounds  int
+	TurnIndex  int
+	Speakers   int
+	Move       string
 }
 
 // VotePromptInput provides context for vote prompts.
@@ -71,6 +74,7 @@ type VotePromptInput struct {
 type ModeratorOpeningInput struct {
 	Scope  string
 	Agenda string
+	Seed   string
 }
 
 // ModeratorSynthesisInput provides context for idea synthesis.
@@ -106,73 +110,62 @@ type ModeratorClosingInput struct {
 }
 
 func defaultDivergentPrompt(input DivergentPromptInput) string {
+	phase := ""
+	if input.MaxRounds > 1 {
+		phase = fmt.Sprintf(" (round %d of %d)", input.Round, input.MaxRounds)
+	}
+
 	ideaTarget := input.IdeaTarget
 	if ideaTarget <= 0 {
 		ideaTarget = defaultIdeaTarget
 	}
-	phase := fmt.Sprintf("Divergent ideation (round %d of %d)", input.Round, input.MaxRounds)
-	if input.MaxRounds <= 1 {
-		phase = "Divergent ideation"
-	}
 
-	return fmt.Sprintf(`%s
+	return fmt.Sprintf(`DIVERGENT IDEATION%s
+Focus: %s
 
-===
-
-BRAINSTORMING: %s
-Scope: %s
-
-Generate %d distinct ideas. Quantity over quality. No judging yet.
-- Keep each idea short: "Title: one-sentence description"
-- One idea per line
-- Stay inside the scope and answer the user's question
-- If you already proposed something similar earlier, do NOT repeat it
-
-Use your unique voice and point of view. Avoid generic corporate language.
-Be lively and specific, but keep each idea under 20 words.`, input.BasePrompt, phase, input.Scope, ideaTarget)
+Generate %d distinct ideas. One per line. Short and specific.
+Do not write paragraphs. No headings, no markdown, no extra commentary.`, phase, input.Scope, ideaTarget)
 }
 
 func defaultInteractionPrompt(input InteractionPromptInput) string {
-	verbosity := "Max 120 words. Short paragraphs."
 	progress := 0.0
 	if input.MaxRounds > 0 {
 		progress = float64(input.Round) / float64(input.MaxRounds)
 	}
+
+	pacing := ""
 	switch {
 	case progress >= 0.8:
-		verbosity = "Max 70 words. Tight responses."
+		pacing = "Final stretch: converge on the top 2-3 ideas and call out tradeoffs."
 	case progress >= 0.5:
-		verbosity = "Max 90 words. Stay concise."
+		pacing = "Midway: pressure-test and sharpen the best ideas."
+	default:
+		pacing = "Early: explore reactions, questions, and extensions."
 	}
 
 	board := strings.TrimSpace(input.Board)
 	if board == "" {
 		board = "(No idea board available yet.)"
 	}
+	move := strings.TrimSpace(input.Move)
+	if move == "" {
+		move = "build or challenge one specific point from the recent thread"
+	}
 
-	return fmt.Sprintf(`%s
+	return fmt.Sprintf(`BRAINSTORMING DISCUSSION (round %d of %d)
+Problem: %s
 
-===
-
-BRAINSTORMING: INTERACTION (round %d of %d)
-Scope: %s
-
-Idea board:
+Current idea board:
 %s
 
-YOUR JOB:
-- Respond directly to what others just said
-- Build on strong ideas ("yes, and...") or challenge weak ones ("no, because...")
-- Combine ideas into stronger hybrids
-- Push toward 2-3 promising directions
-- Keep it lively and real — no parallel monologues
-- Keep your unique voice and perspective — don't mirror other participants
-- Vary your tone and length; avoid templatey lists
-- It's ok to answer with a single sentence if that's the right move
-- If you have a strong take, be blunt
-- Do NOT include <agent:...> tags (they are added automatically)
+%s
+Turn cue (%d/%d): %s
 
-%s`, input.BasePrompt, input.Round, input.MaxRounds, input.Scope, board, verbosity)
+React to something specific someone just said. Keep it short (1-3 sentences).
+Prefer the turn cue above, but stay natural if a different move fits better.
+If you can, add one concrete detail, risk, metric, or example. Avoid generic praise.
+Do not summarize the whole thread. Most turns should be declarative; use a question only when it unlocks a concrete next action.
+Stay in your own voice. Keep it conversational (contractions are fine). No speaker labels or lists. If you see <agent:...> tags in the transcript, ignore them and never repeat them.`, input.Round, input.MaxRounds, input.Scope, board, pacing, input.TurnIndex, input.Speakers, move)
 }
 
 func defaultVotePrompt(input VotePromptInput) string {
@@ -197,61 +190,47 @@ Shortlist:
 }
 
 func defaultBrainstormingContextMessage(thread []agent.Message, currentRound, maxRounds int) agent.Message {
-	var sb strings.Builder
-
-	fmt.Fprintf(&sb, "Round %d of %d\n\n", currentRound, maxRounds)
-	if len(thread) > 0 {
-		last := thread[len(thread)-1]
-		sb.WriteString("WHAT WAS JUST SAID:\n")
-		if last.Name != "" {
-			fmt.Fprintf(&sb, "%s: %s\n\n", last.Name, last.Summary())
-		} else {
-			fmt.Fprintf(&sb, "%s\n\n", last.Summary())
-		}
-
-		recentCount := 3
-		if len(thread) > 1 && len(thread) < recentCount+1 {
-			recentCount = len(thread) - 1
-		}
-		if recentCount > 0 && len(thread) > 1 {
-			sb.WriteString("RECENT CONTEXT:\n")
-			startIdx := len(thread) - recentCount - 1
-			if startIdx < 0 {
-				startIdx = 0
-			}
-			for i := startIdx; i < len(thread)-1; i++ {
-				msg := thread[i]
-				if msg.Name != "" {
-					fmt.Fprintf(&sb, "- %s: %s\n", msg.Name, truncateForContext(msg.Summary(), 100))
-				}
-			}
-			sb.WriteString("\n")
+	if len(thread) == 0 {
+		return agent.Message{
+			Role:  agent.RoleUser,
+			Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: fmt.Sprintf("Round %d of %d - jump in with a short response", currentRound, maxRounds)}},
 		}
 	}
 
-	sb.WriteString("Respond directly to the most recent points. Build or challenge them.")
+	// Just show who said what recently - let the agent figure out how to respond
+	var sb strings.Builder
 
+	// Show the immediate last 2-3 messages as context
+	recentCount := 2
+	if len(thread) < recentCount {
+		recentCount = len(thread)
+	}
+
+	startIdx := len(thread) - recentCount
+	for i := startIdx; i < len(thread); i++ {
+		msg := thread[i]
+		if msg.Name != "" {
+			fmt.Fprintf(&sb, "%s: %s\n", msg.Name, truncateForContext(msg.Summary(), 150))
+		}
+	}
+
+	prefix := fmt.Sprintf("Recent (%d/%d):\n", currentRound, maxRounds)
 	return agent.Message{
 		Role:  agent.RoleUser,
-		Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: sb.String()}},
+		Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: strings.TrimSpace(prefix + sb.String())}},
 	}
 }
 
 func defaultBrainstormScopeRefinementPrompt(userQuestion, configuredScope string) (string, string) {
-	system := `You are a brainstorming moderator. Your job is to clarify the question and define the brainstorming scope so the group stays focused and productive.
+	system := `You are a brainstorming moderator. Your job is to define the scope clearly and tightly.
 
-Produce a short moderator message that:
-1) Restates the core question in clear language
-2) Defines what is in scope vs out of scope
-3) Specifies the type of ideas needed (strategy, product, process, etc.)
-4) Keeps the scope tight enough to be actionable
-
-Write in plain text, no markdown. Keep it under 600 characters.`
+Output ONLY a concise scope statement (1-2 sentences, descriptive not imperative). No greeting, no bullet points, no extra commentary.
+Avoid formulaic phrases like "the goal/objective/scope of this brainstorming session". Keep the total under 300 characters.`
 
 	user := fmt.Sprintf(`User question: %s
 Configured scope: %s
 
-Write the moderator's scope-setting message for the brainstorm.`, userQuestion, configuredScope)
+Write the scope statement for the brainstorm.`, userQuestion, configuredScope)
 
 	return system, user
 }
@@ -264,47 +243,39 @@ func defaultBrainstormScopeFallback(userQuestion, configuredScope string) string
 }
 
 func defaultModeratorOpeningPrompt(input ModeratorOpeningInput) ModeratorPrompt {
-	system := `You are the brainstorm moderator. Set a lively, focused tone and explain how the session will run.`
+	system := `You are the brainstorm moderator. You're a product lead in the room, not a scripted facilitator. Keep it natural and concise.`
 
-	user := fmt.Sprintf(`Scope: %s
-Agenda: %s
+	user := fmt.Sprintf(`Brief: %s
 
-Write a short opening message that:
-- Welcomes the group
-- Reminds them of the scope
-- Explains the phases (diverge → interact → vote)
-- Encourages "yes, and" plus healthy challenge
-- Stays under 8 lines
-- Plain text, no markdown headings, no emojis`, input.Scope, input.Agenda)
+Kick off the brainstorm like a product lead in the room. Start directly (no formal welcome) with a concrete observation from the brief and ask a diagnostic question.
+Invite quick reactions or questions and make it clear we are not jumping into solutions yet.
+Don't restate the goal or scope. Avoid meta-praise or recaps. Keep it conversational, 2-3 sentences. No bullet points or markdown.`, input.Seed)
 
 	return ModeratorPrompt{System: system, User: user, MaxToolIterations: 1}
 }
 
 func defaultModeratorSynthesisPrompt(input ModeratorSynthesisInput) ModeratorPrompt {
-	system := `You are the brainstorm moderator. Summarize the divergent ideas into a clean idea board with themes and candidate ideas.`
+	system := `You are the brainstorm moderator. You've been listening to the team explore ideas. Now you're helping them see what's emerging - patterns, tensions, promising threads. Talk to them like a colleague making sense of a messy whiteboard together.`
 
 	user := fmt.Sprintf(`Scope: %s
 
-Here are the raw ideas from participants:
+Here's what the team has been exploring:
 %s
 
-Create an idea board:
-- Group ideas into 3-5 themes
-- Under each theme list 1-3 concrete ideas
-- End with a short "Candidates" section listing 5-8 ideas worth debating
-- Keep it readable and punchy
-- Use plain text labels, no markdown headings`, input.Scope, input.DivergentBrief)
+Reflect back what you're hearing. What patterns or tensions do you notice? What threads seem worth pulling on? What questions should we dig into next?
+
+Talk to the team conversationally - no bullet points, no numbered lists, no markdown. Just share your observations and set up the next phase of discussion.`, input.Scope, input.DivergentBrief)
 
 	return ModeratorPrompt{System: system, User: user, MaxToolIterations: 1}
 }
 
 func defaultModeratorInterjectionPrompt(input ModeratorInterjectionInput) ModeratorPrompt {
-	urgency := "Early: encourage building and specific reactions."
+	urgency := "We're early - let's encourage building on ideas and getting specific reactions."
 	switch {
 	case input.Progress >= 0.85:
-		urgency = "Final stretch: push for top 2-3 directions and clear tradeoffs."
+		urgency = "We're in the home stretch - converge on the top 2-3 directions and make tradeoffs explicit."
 	case input.Progress >= 0.6:
-		urgency = "Midway: prune weak ideas and merge strong ones."
+		urgency = "We're about halfway - prune what is weak and sharpen what is strong."
 	}
 
 	recent := strings.Join(input.Recent, "\n")
@@ -312,22 +283,24 @@ func defaultModeratorInterjectionPrompt(input ModeratorInterjectionInput) Modera
 		recent = "(No recent messages captured.)"
 	}
 
-	system := `You are the brainstorm moderator. Interject to keep energy high, focus tight, and progress moving.`
+	system := `You are the brainstorm moderator. Jump in to keep things moving productively. You're a colleague helping guide the conversation - warm but direct.`
+
 	user := fmt.Sprintf(`Scope: %s
 Progress: round %d of %d (%.0f%%)
-Urgency: %s
-
-Idea board:
 %s
 
-Recent messages:
+Idea board so far:
 %s
 
-Write a 2-4 sentence interjection that:
-- Calls out promising ideas
-- Challenges weak or vague ones
-- Asks a focused question or sets a mini-goal
-- Use natural language, vary tone, no emojis`, input.Scope, input.CurrentRound, input.MaxRounds, input.Progress*100, urgency, input.Board, recent)
+What just happened:
+%s
+
+Jump in with a quick interjection (2-3 sentences) that:
+- Calls out what is working or what needs push-back
+- Adds one concrete push: either one focused question OR one explicit constraint for the next turns
+- Keeps momentum going
+- Sounds natural, like you are in the room
+- No bullet points, no emojis, no "great discussion"/"love the energy" filler`, input.Scope, input.CurrentRound, input.MaxRounds, input.Progress*100, urgency, input.Board, recent)
 
 	return ModeratorPrompt{System: system, User: user, MaxToolIterations: 1}
 }
@@ -338,7 +311,7 @@ func defaultModeratorShortlistPrompt(input ModeratorShortlistInput) ModeratorPro
 		thread = "(No discussion thread captured.)"
 	}
 
-	system := `You are the brainstorm moderator. Select the most promising ideas for a shortlist.`
+	system := `You are the brainstorm moderator. Select the most promising ideas for a shortlist and tee up a quick vote. Keep it crisp.`
 	user := fmt.Sprintf(`Scope: %s
 Idea board:
 %s
@@ -346,7 +319,10 @@ Idea board:
 Discussion highlights:
 %s
 
-Create a shortlist of up to %d idea titles. Output one idea per line, no extra commentary.`, input.Scope, input.Board, thread, input.Limit)
+Create a shortlist of up to %d idea titles. Output:
+- One short sentence that signals we are converging and about to vote
+- Then a numbered list (1., 2., 3.) with one idea per line
+No extra commentary after the list.`, input.Scope, input.Board, thread, input.Limit)
 
 	return ModeratorPrompt{System: system, User: user, MaxToolIterations: 1}
 }
@@ -366,23 +342,27 @@ func defaultModeratorClosingPrompt(input ModeratorClosingInput) ModeratorPrompt 
 		shortlist = "- " + shortlist
 	}
 
-	system := `You are the brainstorm moderator. Close the session with a decisive, energetic summary.`
+	system := `You are the brainstorm moderator wrapping up the session. Produce a client-ready summary report.`
+
 	user := fmt.Sprintf(`Scope: %s
+
 Idea board:
 %s
 
 Shortlist:
 %s
 
-Vote tally:
+Vote results:
 %s
 
-Write a closing summary that:
-- Names the top 2-3 ideas
-- Gives a brief rationale
-- Calls out any open questions
-- Suggests a next step
-Keep it under 10 lines. Plain text only, no emojis.`, input.Scope, input.Board, shortlist, tallyText)
+Write a short report in markdown (no code fences) with these sections:
+## Goal / Problem
+## What We Explored (themes, not every idea)
+## Finalists (top 2-3 with 1-2 sentence rationale each)
+## Open Questions / Risks
+## Recommended Next Step
+
+Use the vote results if available. Keep it concise and client-facing.`, input.Scope, input.Board, shortlist, tallyText)
 
 	return ModeratorPrompt{System: system, User: user, MaxToolIterations: 1}
 }

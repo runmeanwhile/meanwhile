@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/runmeanwhile/meanwhile/pkg/agent"
@@ -112,9 +113,13 @@ func (s *Session) RunAgent(ctx context.Context, a agent.Agent, req protocol.RunR
 		if err != nil {
 			return agent.Message{}, fmt.Errorf("derive output schema: %w", err)
 		}
+		// OpenAI unified API structured output format
+		// Gets wrapped by client into: text: { format: {...} }
 		params["response_format"] = map[string]any{
-			"type":        "json_schema",
-			"json_schema": schemaJSON,
+			"type":   "json_schema",
+			"name":   "response",
+			"strict": true,
+			"schema": schemaJSON,
 		}
 	}
 
@@ -147,7 +152,8 @@ func (s *Session) RunAgent(ctx context.Context, a agent.Agent, req protocol.RunR
 	history := append([]agent.Message(nil), req.Messages...)
 	contextCfg := resolveContextConfig(s.engine.cfg.Context, req.Context)
 	for attempt := 0; attempt <= maxIterations; attempt++ {
-		selected, err := s.engine.contextPolicy.Select(spanCtx, buildContextInput(model, systemMessages, history, contextCfg, s.engine.contextSummarizer, tokenEstimator))
+		perspectiveHistory := applyAgentPerspective(history, a.Name, s.engine.agentPerspectiveMode)
+		selected, err := s.engine.contextPolicy.Select(spanCtx, buildContextInput(model, systemMessages, perspectiveHistory, contextCfg, s.engine.contextSummarizer, tokenEstimator))
 		if err != nil {
 			runErr = err
 			return agent.Message{}, err
@@ -157,7 +163,7 @@ func (s *Session) RunAgent(ctx context.Context, a agent.Agent, req protocol.RunR
 			Messages: selected,
 			Tools:    toolDefs,
 			Params:   params,
-		}, a.Name, span)
+		}, a.Name, span, req.Silent)
 		if err != nil {
 			runErr = err
 			return agent.Message{}, err
@@ -214,7 +220,7 @@ func (s *Session) RunAgent(ctx context.Context, a agent.Agent, req protocol.RunR
 	return agent.Message{}, ErrToolIterationsExceeded
 }
 
-func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, req provider.Request, agentID string, span telemetry.Span) (agent.Message, []provider.ToolCall, error) {
+func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, req provider.Request, agentID string, span telemetry.Span, silent bool) (agent.Message, []provider.ToolCall, error) {
 	var stream provider.Stream
 	if s.engine.providerRetryEnabled {
 		stream = provider.NewResilientStream(ctx, func(ctx context.Context) (provider.Stream, error) {
@@ -234,6 +240,12 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 	var builder strings.Builder
 	var lastMessage agent.Message
 	toolCalls := make([]provider.ToolCall, 0)
+	emit := func(ev event.Event) {
+		if silent {
+			return
+		}
+		_ = s.EmitWithContext(ctx, ev)
+	}
 
 	for {
 		provEvent, err := stream.Recv()
@@ -254,19 +266,19 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 				"delta": provEvent.Delta,
 			})
 			ev.AgentID = agentID
-			_ = s.EmitWithContext(ctx, ev)
+			emit(ev)
 		case provider.EventReasoningDelta:
 			ev := event.New(event.AgentReasoningDelta, s.id, map[string]any{
 				"delta": provEvent.Delta,
 			})
 			ev.AgentID = agentID
-			_ = s.EmitWithContext(ctx, ev)
+			emit(ev)
 		case provider.EventReasoningSummaryDelta:
 			ev := event.New(event.AgentReasoningSummaryDelta, s.id, map[string]any{
 				"delta": provEvent.Delta,
 			})
 			ev.AgentID = agentID
-			_ = s.EmitWithContext(ctx, ev)
+			emit(ev)
 		case provider.EventMessageCompleted:
 			if len(provEvent.Message.Parts) == 0 {
 				text := builder.String()
@@ -282,7 +294,7 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 				"message": provEvent.Message,
 			})
 			ev.AgentID = agentID
-			_ = s.EmitWithContext(ctx, ev)
+			emit(ev)
 		case provider.EventToolCall:
 			span.AddEvent("tool.call", map[string]any{
 				"tool_calls": len(provEvent.ToolCalls),
@@ -296,7 +308,7 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 					"raw": provEvent.Raw,
 				})
 				ev.AgentID = agentID
-				_ = s.EmitWithContext(ctx, ev)
+				emit(ev)
 			}
 		case provider.EventError:
 			if provEvent.Err != nil {
@@ -549,5 +561,97 @@ func deriveOutputSchema(schema any) (map[string]any, error) {
 		return nil, fmt.Errorf("unmarshal schema: %w", err)
 	}
 
+	enforceStrictSchema(schemaMap)
+
 	return schemaMap, nil
+}
+
+func enforceStrictSchema(node any) {
+	switch v := node.(type) {
+	case map[string]any:
+		enforceStrictSchemaMap(v)
+	case []any:
+		for _, item := range v {
+			enforceStrictSchema(item)
+		}
+	}
+}
+
+func enforceStrictSchemaMap(schema map[string]any) {
+	if schema == nil {
+		return
+	}
+	var props map[string]any
+	if schemaType, ok := schema["type"].(string); ok && schemaType == "object" {
+		if rawProps, hasProps := schema["properties"].(map[string]any); hasProps {
+			props = rawProps
+			if _, ok := schema["additionalProperties"]; !ok {
+				schema["additionalProperties"] = false
+			}
+			ensureRequiredAllProperties(schema, props)
+		}
+	}
+
+	if props != nil {
+		for _, prop := range props {
+			enforceStrictSchema(prop)
+		}
+	}
+	if items, ok := schema["items"]; ok {
+		enforceStrictSchema(items)
+	}
+	if additional, ok := schema["additionalProperties"]; ok {
+		switch nested := additional.(type) {
+		case map[string]any, []any:
+			enforceStrictSchema(nested)
+		}
+	}
+	for _, key := range []string{"anyOf", "oneOf", "allOf"} {
+		if variants, ok := schema[key].([]any); ok {
+			for _, variant := range variants {
+				enforceStrictSchema(variant)
+			}
+		}
+	}
+}
+
+func ensureRequiredAllProperties(schema map[string]any, props map[string]any) {
+	if len(props) == 0 {
+		return
+	}
+	requiredSet := make(map[string]struct{}, len(props))
+	switch raw := schema["required"].(type) {
+	case []string:
+		for _, item := range raw {
+			requiredSet[item] = struct{}{}
+		}
+	case []any:
+		for _, item := range raw {
+			if str, ok := item.(string); ok {
+				requiredSet[str] = struct{}{}
+			}
+		}
+	}
+
+	if len(requiredSet) != len(props) {
+		required := make([]string, 0, len(props))
+		for key := range props {
+			required = append(required, key)
+		}
+		sort.Strings(required)
+		schema["required"] = required
+		return
+	}
+
+	for key := range props {
+		if _, ok := requiredSet[key]; !ok {
+			required := make([]string, 0, len(props))
+			for propKey := range props {
+				required = append(required, propKey)
+			}
+			sort.Strings(required)
+			schema["required"] = required
+			return
+		}
+	}
 }

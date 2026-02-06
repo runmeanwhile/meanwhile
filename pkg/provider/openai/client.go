@@ -192,7 +192,7 @@ func buildInput(messages []agent.Message) ([]map[string]any, error) {
 }
 
 func wrapNamedMessage(msg agent.Message) agent.Message {
-	if msg.Name == "" || msg.Role != agent.RoleAssistant {
+	if msg.Name == "" || msg.Role == agent.RoleTool {
 		return msg
 	}
 

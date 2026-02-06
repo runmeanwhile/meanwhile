@@ -77,6 +77,7 @@ type RunRequest struct {
 	ToolPolicy        tool.Policy
 	Context           ContextConfig
 	OutputSchema      any // Optional: constrains output to this type (overrides agent-level schema)
+	Silent            bool
 }
 
 // ContextConfig configures context selection.

@@ -91,6 +91,88 @@ func TestRunAgentAppliesRollingWindow(t *testing.T) {
 	}
 }
 
+func TestRunAgentAppliesAgentPerspectiveToNamedAssistantMessages(t *testing.T) {
+	prov := &contextRecordingProvider{}
+	eng, err := New(WithProvider(prov))
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	participant := agent.Agent{Name: "Alice", Model: "test"}
+	sess, err := eng.NewSession(context.Background(), SessionConfig{
+		Protocol:     noopProtocol{},
+		Participants: []protocol.Participant{participant},
+	})
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+
+	_, err = sess.RunAgent(context.Background(), participant, protocol.RunRequest{
+		Messages: []agent.Message{
+			{Role: agent.RoleUser, Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "Start"}}},
+			{Role: agent.RoleAssistant, Name: "Bob", Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "Peer idea"}}},
+			{Role: agent.RoleAssistant, Name: "Alice", Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "My prior idea"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("run agent: %v", err)
+	}
+
+	if len(prov.requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(prov.requests))
+	}
+	req := prov.requests[0]
+	if len(req.Messages) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(req.Messages))
+	}
+	if req.Messages[1].Role != agent.RoleUser {
+		t.Fatalf("expected peer assistant message to be rewritten as user, got %s", req.Messages[1].Role)
+	}
+	if req.Messages[1].Name != "Bob" {
+		t.Fatalf("expected peer speaker name to be preserved, got %q", req.Messages[1].Name)
+	}
+	if req.Messages[2].Role != agent.RoleAssistant {
+		t.Fatalf("expected current agent prior message to remain assistant, got %s", req.Messages[2].Role)
+	}
+}
+
+func TestRunAgentPreservesNamedAssistantMessagesInLegacyPerspectiveMode(t *testing.T) {
+	prov := &contextRecordingProvider{}
+	eng, err := New(WithProvider(prov), WithAgentPerspectiveMode(AgentPerspectiveLegacy))
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	participant := agent.Agent{Name: "Alice", Model: "test"}
+	sess, err := eng.NewSession(context.Background(), SessionConfig{
+		Protocol:     noopProtocol{},
+		Participants: []protocol.Participant{participant},
+	})
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+
+	_, err = sess.RunAgent(context.Background(), participant, protocol.RunRequest{
+		Messages: []agent.Message{
+			{Role: agent.RoleAssistant, Name: "Bob", Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "Peer idea"}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("run agent: %v", err)
+	}
+
+	if len(prov.requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(prov.requests))
+	}
+	req := prov.requests[0]
+	if len(req.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(req.Messages))
+	}
+	if req.Messages[0].Role != agent.RoleAssistant {
+		t.Fatalf("expected legacy mode to preserve assistant role, got %s", req.Messages[0].Role)
+	}
+}
+
 func TestRunAgentTruncatesToolOutput(t *testing.T) {
 	prov := &contextRecordingProvider{}
 	eng, err := New(WithProvider(prov))

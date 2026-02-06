@@ -227,7 +227,8 @@ func (s *Session) resumeToolContinuation(ctx context.Context, cont toolContinuat
 	systemMessages := append([]agent.Message(nil), cont.SystemMessages...)
 
 	for attempt := cont.NextAttempt; attempt <= maxIterations; attempt++ {
-		selected, err := s.engine.contextPolicy.Select(spanCtx, buildContextInput(model, systemMessages, history, contextCfg, s.engine.contextSummarizer, tokenEstimator))
+		perspectiveHistory := applyAgentPerspective(history, cont.Agent.Name, s.engine.agentPerspectiveMode)
+		selected, err := s.engine.contextPolicy.Select(spanCtx, buildContextInput(model, systemMessages, perspectiveHistory, contextCfg, s.engine.contextSummarizer, tokenEstimator))
 		if err != nil {
 			runErr = err
 			return agent.Message{}, err
@@ -237,7 +238,7 @@ func (s *Session) resumeToolContinuation(ctx context.Context, cont toolContinuat
 			Messages: selected,
 			Tools:    toolDefs,
 			Params:   params,
-		}, cont.Agent.Name, span)
+		}, cont.Agent.Name, span, false)
 		if err != nil {
 			runErr = err
 			return agent.Message{}, err

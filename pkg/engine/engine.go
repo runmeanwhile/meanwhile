@@ -60,6 +60,7 @@ type Engine struct {
 	logger                   logger.Logger
 	contextPolicy            contextpolicy.Policy
 	contextSummarizer        contextpolicy.Summarizer
+	agentPerspectiveMode     AgentPerspectiveMode
 	providerRetryConfig      provider.ResilientConfig
 	providerRetryEnabled     bool
 	defaultRunTimeout        time.Duration
@@ -285,6 +286,14 @@ func WithContextSummarizer(summarizer contextpolicy.Summarizer) Option {
 	}
 }
 
+// WithAgentPerspectiveMode configures how prior named assistant messages are interpreted for each agent turn.
+func WithAgentPerspectiveMode(mode AgentPerspectiveMode) Option {
+	return func(e *Engine) error {
+		e.agentPerspectiveMode = normalizeAgentPerspectiveMode(mode)
+		return nil
+	}
+}
+
 // WithProviderRetryConfig sets retry behavior for provider streams.
 func WithProviderRetryConfig(cfg provider.ResilientConfig) Option {
 	return func(e *Engine) error {
@@ -396,6 +405,7 @@ func New(opts ...Option) (*Engine, error) {
 		contextPolicy: contextpolicy.NewAutoSummarizePolicy(contextpolicy.NewDefaultPolicy(), contextpolicy.AutoSummarizeConfig{
 			SummarizeAtTokens: defaultAutoSummarizeTokens,
 		}),
+		agentPerspectiveMode: AgentPerspectiveSpeakerAware,
 		providerRetryConfig:  provider.DefaultResilientConfig(),
 		providerRetryEnabled: true,
 		defaultRunTimeout:    10 * time.Minute,

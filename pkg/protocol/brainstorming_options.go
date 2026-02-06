@@ -1,12 +1,15 @@
 package protocol
 
-import "strings"
+import (
+	"maps"
+	"strings"
+)
 
 const (
 	defaultDivergentRounds   = 1
 	defaultInteractionRounds = 2
 	defaultIdeaTarget        = 5
-	defaultShortlistSize     = 5
+	defaultShortlistSize     = 3
 	defaultVotesPerAgent     = 3
 )
 
@@ -31,6 +34,7 @@ type brainstormingConfig struct {
 	VoteEnabled           bool
 	VotesPerAgent         int
 	VoteWeights           []int
+	Params                map[string]any
 	Scope                 string
 	Outcome               string
 	Briefs                []string
@@ -126,6 +130,17 @@ func WithBrainstormingVoteWeights(weights ...int) BrainstormingOption {
 		if len(out) > 0 {
 			cfg.VoteWeights = out
 		}
+	}
+}
+
+// WithBrainstormingParams sets default run parameters for agent turns (e.g., temperature).
+// Any params explicitly set on an agent will take precedence.
+func WithBrainstormingParams(params map[string]any) BrainstormingOption {
+	return func(cfg *brainstormingConfig) {
+		if len(params) == 0 {
+			return
+		}
+		cfg.Params = cloneParams(params)
 	}
 }
 
@@ -281,6 +296,7 @@ func defaultBrainstormingConfig() brainstormingConfig {
 		VoteEnabled:           true,
 		VotesPerAgent:         defaultVotesPerAgent,
 		VoteWeights:           append([]int(nil), defaultVoteWeights...),
+		Params:                nil,
 		Scope:                 "Generate and refine ideas, then converge on top directions.",
 		InterventionPoints:    []float64{0.45, 0.8},
 		ScopeRefinement:       defaultBrainstormScopeRefinementPrompt,
@@ -307,10 +323,20 @@ func (c brainstormingConfig) asConfig() Config {
 		"vote_enabled":        c.VoteEnabled,
 		"votes_per_agent":     c.VotesPerAgent,
 		"vote_weights":        append([]int(nil), c.VoteWeights...),
+		"params":              cloneParams(c.Params),
 		"scope":               c.Scope,
 		"outcome":             c.Outcome,
 		"briefs":              append([]string(nil), c.Briefs...),
 		"intervention_points": append([]float64(nil), c.InterventionPoints...),
 	}
+	return out
+}
+
+func cloneParams(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	maps.Copy(out, in)
 	return out
 }

@@ -62,6 +62,14 @@ func TestDeriveOutputSchema(t *testing.T) {
 				if result["properties"] == nil {
 					t.Error("Expected properties in schema")
 				}
+				if result["additionalProperties"] != false {
+					t.Errorf("Expected additionalProperties=false, got %v", result["additionalProperties"])
+				}
+				props, _ := result["properties"].(map[string]any)
+				required, _ := result["required"].([]any)
+				if len(props) > 0 && len(required) != len(props) {
+					t.Errorf("Expected required to include all properties, got %v", result["required"])
+				}
 			}
 		})
 	}
@@ -166,7 +174,7 @@ func TestRunRequestOutputSchemaOverride(t *testing.T) {
 		t.Fatal("Expected response_format in params")
 	}
 
-	schemaJSON, err := json.Marshal(responseFormat["json_schema"])
+	schemaJSON, err := json.Marshal(responseFormat["schema"])
 	if err != nil {
 		t.Fatal(err)
 	}

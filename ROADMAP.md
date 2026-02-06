@@ -92,6 +92,7 @@ This roadmap outlines planned capabilities and improvements. Items are organized
 - **Persona generation** - AI-assisted persona creation
 - **Team templates** - Pre-configured teams for common scenarios
 - **Persona testing** - Sandbox for testing personas before deployment
+- **Persona refinement pipeline** - Trace/eval-driven persona updates with versioning, approval, and canary rollout
 
 ### Memory & Context
 - **Memory browser** - Visualize what agents remember

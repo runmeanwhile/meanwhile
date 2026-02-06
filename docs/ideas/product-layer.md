@@ -96,6 +96,13 @@ Product analytics for persona quality and team effectiveness.
 - Drift detection and regressions on output quality.
 - Post-session feedback loops to refine persona specs.
 
+**Before Studio exists (bootstrap path)**
+- Keep refinement out of the runtime loop. Runtime executes a pinned persona version and emits traces/events.
+- Run offline evaluations against datasets and protocol variants (for example via `cmd/protocol-eval`).
+- Generate surgical persona prompt diffs from eval failures, review them, then publish a new persona version.
+- Canary new versions first, compare against baseline, and only promote on regression-safe wins.
+- Treat persona memory (if used) as bounded read-only context during runs, not a self-mutating prompt source.
+
 ---
 
 ## 4) UX sketches (what it feels like)
@@ -196,6 +203,7 @@ team:
 - Auto team assembly logic and LLM selection
 - Session presets and scheduling UI
 - Human persona consent and preference UX
+- Persona auto-refinement orchestration (trace analysis -> candidate patch -> approval -> rollout)
 
 All of these compile down to existing framework primitives.
 

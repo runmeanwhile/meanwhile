@@ -1,0 +1,11 @@
+{
+  "name": "brainstorming-core",
+  "protocol": "brainstorming",
+  "scenarios": [
+    {
+      "id": "signalthread-week3",
+      "description": "Week-3 engagement drop in KPI meetings",
+      "prompt": "SignalThread serves ops managers at mid-market retail/logistics/supply chain teams who run multiple weekly KPI reviews. Onboarding works, but by week 3 meetings feel like reruns and by week 4-6 task follow-through collapses, so teams drift back to spreadsheets and Slack. We need one shippable-this-quarter feature that makes meetings feel fresh and makes follow-up tasks urgent, without changing their workflow or adding a new app."
+    }
+  ]
+}

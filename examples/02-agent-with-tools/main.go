@@ -19,13 +19,22 @@ type TicketArgs struct {
 
 func main() {
 	// Provider and engine
-	provider, _ := openai.FromEnv()
-	eng, _ := engine.New(engine.WithProvider(provider))
+	provider, err := openai.FromEnv()
+	if err != nil {
+		log.Fatalf("Failed to create OpenAI provider: %v", err)
+	}
+	eng, err := engine.New(engine.WithProvider(provider))
+	if err != nil {
+		log.Fatalf("Failed to create engine: %v", err)
+	}
 
 	// Create typed tool
-	ticketTool, _ := tool.New[TicketArgs, string]("create_ticket", func(_ context.Context, args TicketArgs) (string, error) {
+	ticketTool, err := tool.New[TicketArgs, string]("create_ticket", func(_ context.Context, args TicketArgs) (string, error) {
 		return fmt.Sprintf("Ticket #%d created: %s [%s]", 1337, args.Issue, args.Priority), nil
 	})
+	if err != nil {
+		log.Fatalf("Failed to create tool: %v", err)
+	}
 
 	// Register and use tool in one step
 	result, err := eng.Agent("Helpdesk").

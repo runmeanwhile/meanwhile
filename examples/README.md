@@ -47,6 +47,12 @@ Brainstorming protocol: diverge, interact, and vote with a moderator-led flow.
 cd 05-protocol-brainstorming && go run main.go
 ```
 
+Compare brainstorming runtime/prompt variants:
+
+```bash
+go run ./cmd/brainstorm-compare -runs 3 -rounds 5
+```
+
 ### [06-protocol-consensus](./06-protocol-consensus)
 Consensus protocol: gather proposals, facilitator synthesizes.
 

@@ -11,8 +11,14 @@ import (
 
 func main() {
 	// Provider and engine setup
-	provider, _ := openai.FromEnv()
-	eng, _ := engine.New(engine.WithProvider(provider))
+	provider, err := openai.FromEnv()
+	if err != nil {
+		log.Fatalf("Failed to create OpenAI provider: %v", err)
+	}
+	eng, err := engine.New(engine.WithProvider(provider))
+	if err != nil {
+		log.Fatalf("Failed to create engine: %v", err)
+	}
 
 	// Run agent directly
 	result, err := eng.Agent("Dale").

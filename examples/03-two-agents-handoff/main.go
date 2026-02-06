@@ -15,8 +15,14 @@ func main() {
 	ctx := context.Background()
 
 	// Setup
-	provider, _ := openai.FromEnv()
-	eng, _ := engine.New(engine.WithProvider(provider))
+	provider, err := openai.FromEnv()
+	if err != nil {
+		log.Fatalf("Failed to create OpenAI provider: %v", err)
+	}
+	eng, err := engine.New(engine.WithProvider(provider))
+	if err != nil {
+		log.Fatalf("Failed to create engine: %v", err)
+	}
 
 	// Two agents with distinct roles
 	receptionist := eng.Agent("Reception").
@@ -30,9 +36,12 @@ func main() {
 		Build()
 
 	// Create session with handoff protocol
-	sess, _ := eng.Session("Escalation").
+	sess, err := eng.Session("Escalation").
 		Protocol(protocol.Handoff(receptionist, specialist)).
 		Start(ctx)
+	if err != nil {
+		log.Fatalf("Failed to start session: %v", err)
+	}
 
 	// Run through the chain
 	result, err := eng.Run(ctx, sess.ID(), message.User("I deleted the production database. Was that bad?"))

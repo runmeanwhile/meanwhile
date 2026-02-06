@@ -17,11 +17,17 @@ func main() {
 	ctx := context.Background()
 
 	// Engine with workplace logging
-	provider, _ := openai.FromEnv()
-	eng, _ := engine.New(
+	provider, err := openai.FromEnv()
+	if err != nil {
+		log.Fatalf("Failed to create OpenAI provider: %v", err)
+	}
+	eng, err := engine.New(
 		engine.WithProvider(provider),
 		engine.WithLogger(logger.Worklog(os.Stdout)),
 	)
+	if err != nil {
+		log.Fatalf("Failed to create engine: %v", err)
+	}
 
 	// Agent
 	consultant := eng.Agent("Consultant").
@@ -30,12 +36,15 @@ func main() {
 		Build()
 
 	// Session with metadata
-	sess, _ := eng.Session("ISO Assessment").
+	sess, err := eng.Session("ISO Assessment").
 		Participant(consultant).
 		Protocol(protocol.Solo()).
 		Tags("urgent", "billable").
 		Metadata("client", "BigCorp").
 		Start(ctx)
+	if err != nil {
+		log.Fatalf("Failed to start session: %v", err)
+	}
 
 	// Run and inspect result
 	result, err := eng.Run(ctx, sess.ID(), message.User("Should we be worried about our mainframe?"))

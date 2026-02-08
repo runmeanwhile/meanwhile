@@ -138,6 +138,32 @@ func (s *Session) EmitWithContext(ctx context.Context, ev event.Event) error {
 	return busErr
 }
 
+// History retrieves the full conversation history from session memory,
+// including all agent messages AND tool calls/results.
+//
+// This is the canonical way for protocols to access conversation context.
+// Unlike roundtable.Thread() which only captures final text responses,
+// History() returns the complete record of what happened in the session.
+//
+// Options can filter or limit the returned messages:
+//   - memory.WithRecent(n) - limit to N most recent messages
+//   - memory.WithTokenLimit(n) - truncate to fit token budget
+//   - memory.WithMessageTypes(...) - filter to specific event types
+//
+// Example:
+//
+//	// Get full history including tool calls
+//	history, err := sess.History(ctx)
+//
+//	// Get recent messages only
+//	history, err := sess.History(ctx, memory.WithRecent(20))
+func (s *Session) History(ctx context.Context, opts ...memory.ContextOption) ([]agent.Message, error) {
+	if s.memory == nil {
+		return nil, nil // No memory store configured
+	}
+	return memory.BuildConversationContext(ctx, s.memory, s.id, opts...)
+}
+
 // Run executes a protocol turn with the given message and returns the result.
 // This is a convenience method that wraps engine.Run() to hide session ID plumbing.
 func (s *Session) Run(ctx context.Context, msg agent.Message) (*RunResult, error) {

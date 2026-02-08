@@ -334,3 +334,90 @@ func TestSessionEmitReturnsMemoryError(t *testing.T) {
 		t.Fatalf("expected error from memory append")
 	}
 }
+
+func TestSessionHistory(t *testing.T) {
+	ctx := context.Background()
+	store := memory.NewInMemoryStore()
+	sessionID := "test-history-session"
+
+	s := &Session{
+		id:     sessionID,
+		memory: store,
+	}
+
+	// Store some events via Emit
+	msg1 := agent.Message{Role: agent.RoleUser, Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "Hello"}}}
+	msg2 := agent.Message{Role: agent.RoleAssistant, Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "Hi there"}}}
+
+	_ = store.Append(ctx, sessionID, event.New(event.AgentMessageComplete, sessionID, map[string]any{"message": msg1}))
+	_ = store.Append(ctx, sessionID, event.New(event.AgentMessageComplete, sessionID, map[string]any{"message": msg2}))
+
+	// Also store a tool call event
+	toolResult := tool.Result{
+		ID:     "call-1",
+		ToolID: "search",
+		Output: map[string]any{"results": []string{"item1", "item2"}},
+	}
+	_ = store.Append(ctx, sessionID, event.New(event.ToolCallCompleted, sessionID, map[string]any{"result": toolResult}))
+
+	// Get history
+	history, err := s.History(ctx)
+	if err != nil {
+		t.Fatalf("History() error: %v", err)
+	}
+
+	// Should have 3 messages: user, assistant, and tool result
+	if len(history) != 3 {
+		t.Errorf("Expected 3 messages, got %d", len(history))
+	}
+
+	// Verify order and content
+	if history[0].Role != agent.RoleUser {
+		t.Errorf("Expected first message to be user, got %s", history[0].Role)
+	}
+	if history[1].Role != agent.RoleAssistant {
+		t.Errorf("Expected second message to be assistant, got %s", history[1].Role)
+	}
+	if history[2].Role != agent.RoleTool {
+		t.Errorf("Expected third message to be tool, got %s", history[2].Role)
+	}
+}
+
+func TestSessionHistoryWithNoMemory(t *testing.T) {
+	s := &Session{id: "no-memory"}
+
+	history, err := s.History(context.Background())
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if history != nil {
+		t.Errorf("Expected nil history when no memory, got %v", history)
+	}
+}
+
+func TestSessionHistoryWithOptions(t *testing.T) {
+	ctx := context.Background()
+	store := memory.NewInMemoryStore()
+	sessionID := "test-history-options"
+
+	s := &Session{
+		id:     sessionID,
+		memory: store,
+	}
+
+	// Store 5 messages
+	for i := 0; i < 5; i++ {
+		msg := agent.Message{Role: agent.RoleAssistant, Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "msg"}}}
+		_ = store.Append(ctx, sessionID, event.New(event.AgentMessageComplete, sessionID, map[string]any{"message": msg}))
+	}
+
+	// Get only recent 2
+	history, err := s.History(ctx, memory.WithRecent(2))
+	if err != nil {
+		t.Fatalf("History() error: %v", err)
+	}
+
+	if len(history) != 2 {
+		t.Errorf("Expected 2 messages with WithRecent(2), got %d", len(history))
+	}
+}

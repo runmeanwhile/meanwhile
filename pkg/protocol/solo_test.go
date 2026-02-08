@@ -7,6 +7,7 @@ import (
 
 	"github.com/runmeanwhile/meanwhile/pkg/agent"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/memory"
 	"github.com/runmeanwhile/meanwhile/pkg/message"
 )
 
@@ -39,6 +40,10 @@ func (m *mockSession) Emit(ev event.Event) error {
 func (m *mockSession) EmitWithContext(ctx context.Context, ev event.Event) error {
 	_ = ctx
 	return m.Emit(ev)
+}
+
+func (m *mockSession) History(_ context.Context, _ ...memory.ContextOption) ([]agent.Message, error) {
+	return nil, nil // Mock returns empty history
 }
 
 func (m *mockSession) RunAgent(ctx context.Context, ag agent.Agent, req RunRequest) (agent.Message, error) {

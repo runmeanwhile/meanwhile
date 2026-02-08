@@ -6,6 +6,7 @@ import (
 
 	"github.com/runmeanwhile/meanwhile/pkg/agent"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
+	"github.com/runmeanwhile/meanwhile/pkg/memory"
 	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
@@ -64,6 +65,10 @@ type Session interface {
 	RegisterTools(tools ...any) error
 	AddDefaultTools(ids ...string)
 	DefaultTools() []string
+	// History returns the full conversation history from session memory,
+	// including all agent messages AND tool calls/results.
+	// This is the canonical way for protocols to access conversation context.
+	History(ctx context.Context, opts ...memory.ContextOption) ([]agent.Message, error)
 }
 
 // RunRequest configures an agent execution.

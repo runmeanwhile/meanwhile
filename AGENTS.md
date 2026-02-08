@@ -32,6 +32,8 @@ Meanwhile is a Go framework for multi‑agent collaboration. The core engine is 
 
 **Think:** "This is a meeting format people would recognize and use."
 
+**⚠️ Context management:** Protocols should use `Session.History(ctx)` for conversation context, NOT `roundtable.Thread()`. The Session stores all events including tool calls and results; Roundtable only tracks final text responses. If agents need to see what tools were called, they must get context from Session.History().
+
 ### 🧩 Collaboration Kit (`pkg/collab/`)
 **What:** Reusable, composable primitives for building protocols.
 
@@ -44,6 +46,8 @@ Meanwhile is a Go framework for multi‑agent collaboration. The core engine is 
 **Examples:** `roundtable` (turn management), `chair` (facilitation), `minutes` (structured results), `agenda` (scope setting), `pulse` (consensus checking)
 
 **Think:** "Multiple protocols need this piece; it shouldn't be duplicated."
+
+**Note on Roundtable:** The roundtable is for **turn orchestration** (who speaks when, round counting), not for context management. Its `Thread()` method only contains final agent responses—it does NOT include tool calls or results. For full conversation history, protocols should use `Session.History(ctx)`.
 
 ### ⚙️ Engine Core (`pkg/engine/`)
 **What:** Framework infrastructure that all protocols rely on.
@@ -158,6 +162,7 @@ If you’re unsure where to implement something, start in `docs/guides/build-a-p
 - **Context policy is layered.** `AutoSummarizePolicy` wraps another policy; overrides must preserve the base policy so existing selection logic still applies.
 - **Retries are stream-level.** The resilient wrapper sits around provider streams and must treat EOF as terminal (no retry).
 - **Pending tool calls are first-class.** Pending tool requests + continuations are stored in `SessionState` and resumed via `ResumeTool`.
+- **Session.History() is the source of truth for conversation context.** All events (including tool calls and results) are stored in `Session.Memory`. Use `sess.History(ctx)` to get full history. Roundtable's `Thread()` only contains final text responses and misses tool interactions.
 
 ### What to follow next time
 - **Register protocol factories in tests that load sessions.** Don’t assume `New()` auto-registers protocol factories.

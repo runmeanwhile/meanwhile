@@ -740,6 +740,7 @@ func (e *Engine) Run(ctx context.Context, sessionID string, msg agent.Message) (
 	if rp, ok := sess.protocol.(protocol.ResultProvider); ok {
 		if meta := rp.Result(); len(meta) > 0 {
 			result.Metadata = cloneMetadata(meta)
+			applyProtocolSummary(result)
 			return result, nil
 		}
 	}
@@ -751,6 +752,7 @@ func (e *Engine) Run(ctx context.Context, sessionID string, msg agent.Message) (
 			result.Metadata["protocol_action"] = action
 		}
 	}
+	applyProtocolSummary(result)
 
 	return result, nil
 }

@@ -28,26 +28,35 @@ The recall tool uses OpenAI embeddings (`text-embedding-3-small`) to vectorize d
    - Prevents anchoring bias while preserving essential insights
    - Configurable: `TransferSummaryOnly`, `TransferWithHistory`, or `TransferFull`
 
-3. **IDEO Brainstorming Rules Built-In**
+3. **Semantic Stage Planning (Tool-Driven)**
+   - Moderator calls `set_stage_plan` before phase work begins
+   - Plan captures non-negotiables, relevant lenses, prioritized tools, and key questions
+   - Lenses are selected semantically by the model (not hard-coded per problem pattern)
+
+4. **IDEO Brainstorming Rules Built-In**
    - Defer judgment (no "yes, but..." during ideation)
    - Encourage wild ideas
    - Build on others' ideas ("yes, and...")
    - Go for quantity
    - Be visual (artifact tools)
 
-4. **Diversity Injection**
+5. **Diversity Injection**
    - Moderator nudges agents toward different disciplines/lenses each round
    - Mental model prompts rotate to encourage different thinking styles
    - User vantage points ensure we consider multiple user types
 
-5. **Artifact-Based Thinking**
+6. **Artifact-Based Thinking**
    - `sketch_diagram`: Create mermaid diagrams (flows, journeys)
    - `sketch_concept_card`: Structured concept cards (problem, mechanism, value, risk)
    - `sketch_journey`: User journey maps with emotional arcs
 
-6. **Human-in-the-Loop** (optional)
-   - Stakeholders can be consulted during synthesis to validate assumptions
-   - Configurable timeout and fallback behavior
+7. **Human Validation Hook** (optional)
+   - Protocol exposes a synthesis hook for stakeholder validation
+   - This example run keeps it disabled by default to avoid placeholder feedback
+
+8. **Metric-Linked Evidence Gate**
+   - Experiment cards now require baseline/target/delta/segment/time-to-impact fields
+   - Cards lacking concrete evidence references are rejected
 
 ## Running
 
@@ -82,11 +91,10 @@ ideo.Brainstorm(
 
     // Features
     ideo.WithArtifactTools(true),
-    ideo.WithHumanInLoop(true),
-    ideo.WithStakeholder(ideo.Stakeholder{...}),
+    ideo.WithHumanInLoop(false),
 
     // Context transfer
-    ideo.WithTransferStrategy(ideo.TransferSummaryOnly),
+    ideo.WithTransferStrategy(ideo.TransferWithHistory),
 )
 ```
 
@@ -99,7 +107,7 @@ ideo.Brainstorm(
 | Reframe rounds | 1 round | 3 rounds (configurable) |
 | Diversity injection | Limited | Explicit nudges per round |
 | Artifact tools | None | Diagram, card, journey |
-| Human validation | Limited | Full ask_human support |
+| Human validation | Limited | Validation hook (manual integration) |
 
 ## Architecture
 

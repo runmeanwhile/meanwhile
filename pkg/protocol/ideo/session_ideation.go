@@ -27,7 +27,7 @@ type IdeationResult struct {
 
 // runIdeation executes the ideation phase.
 // Goal: Generate divergent concepts with wild ideas and artifact-based thinking.
-func (p *brainstormIDEO) runIdeation(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, reframeTransfer *TransferPacket) (*IdeationResult, error) {
+func (p *brainstormIDEO) runIdeation(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, reframeTransfer *TransferPacket, stagePlan *StagePlan) (*IdeationResult, error) {
 	rounds := p.cfg.IdeationRounds
 	if rounds <= 0 {
 		rounds = 2
@@ -38,11 +38,6 @@ func (p *brainstormIDEO) runIdeation(ctx context.Context, sess protocol.Session,
 		if err := p.registerArtifactTools(sess); err != nil {
 			return nil, err
 		}
-	}
-
-	// Kick off with transition from reframe
-	if err := p.runIdeationKickoff(ctx, sess, agents, scope, reframeTransfer); err != nil {
-		return nil, err
 	}
 
 	// Extract selected frames from transfer
@@ -59,6 +54,15 @@ func (p *brainstormIDEO) runIdeation(ctx context.Context, sess protocol.Session,
 	// Seed with reframe context
 	if reframeTransfer != nil && reframeTransfer.Summary != "" {
 		rt.Record(message.User(fmt.Sprintf("Context from reframe:\n%s", reframeTransfer.Summary)))
+	}
+
+	// Kick off with transition from reframe
+	kickoff, err := p.runIdeationKickoff(ctx, sess, agents, scope, reframeTransfer)
+	if err != nil {
+		return nil, err
+	}
+	if kickoff.Role != "" {
+		rt.Record(kickoff)
 	}
 	rt.Record(message.User("Ideation phase begins. Generate wild, creative concepts. Use artifact tools to sketch your ideas."))
 
@@ -90,7 +94,7 @@ func (p *brainstormIDEO) runIdeation(ctx context.Context, sess protocol.Session,
 				op = ops[idx]
 			}
 
-			system := p.buildIdeationPrompt(participant, scope, selectedFrames, currentRound, rounds, op, buildTarget)
+			system := p.buildIdeationPrompt(participant, scope, selectedFrames, currentRound, rounds, op, buildTarget, stagePlan)
 
 			// Allow more tool iterations for artifact creation
 			toolBudget := 2
@@ -115,25 +119,37 @@ func (p *brainstormIDEO) runIdeation(ctx context.Context, sess protocol.Session,
 
 		// Between rounds, moderator encourages wilder ideas
 		if currentRound < rounds {
-			if err := p.runIdeationRoundBridge(ctx, sess, agents, currentRound, rounds); err != nil {
+			bridge, err := p.runIdeationRoundBridge(ctx, sess, agents, currentRound, rounds)
+			if err != nil {
 				return nil, err
+			}
+			if bridge.Role != "" {
+				rt.Record(bridge)
 			}
 		}
 	}
 
-	// Extract concepts and artifacts from thread
-	result := p.extractIdeationResults(rt.Thread())
+	// Extract concepts and artifacts from tool results + thread synthesis
+	result, err := p.extractIdeationResults(ctx, sess, agents, scope, selectedFrames, rt.Thread(), stagePlan)
+	if err != nil {
+		return nil, err
+	}
 	result.Thread = rt.Thread()
 
 	// Moderator synthesis
-	if err := p.runIdeationSynthesis(ctx, sess, agents, result); err != nil {
+	summaryMsg, err := p.runIdeationSynthesis(ctx, sess, agents, result)
+	if err != nil {
 		return nil, err
 	}
+	if summaryMsg.Role != "" {
+		rt.Record(summaryMsg)
+	}
+	result.Thread = rt.Thread()
 
 	return result, nil
 }
 
-func (p *brainstormIDEO) runIdeationKickoff(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, transfer *TransferPacket) error {
+func (p *brainstormIDEO) runIdeationKickoff(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, transfer *TransferPacket) (agent.Message, error) {
 	runner := p.selectRunner(sess, agents)
 
 	system := `You are the moderator beginning the IDEATION phase.
@@ -155,16 +171,20 @@ Sound energized and playful. This is the fun part.`
 	}
 	userPrompt.WriteString("\nKick off ideation!")
 
-	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
+	resp, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
 		Messages:          []agent.Message{message.User(userPrompt.String())},
 		SystemMessages:    []agent.Message{message.System(system)},
 		Params:            p.runParamsFor(runner),
 		MaxToolIterations: 1,
 	})
-	return err
+	if err != nil {
+		return agent.Message{}, err
+	}
+	resp.Name = runner.Name
+	return resp, nil
 }
 
-func (p *brainstormIDEO) buildIdeationPrompt(participant agent.Agent, scope string, frames []reframer.Frame, round, totalRounds int, op ideationops.Operator, buildTarget string) string {
+func (p *brainstormIDEO) buildIdeationPrompt(participant agent.Agent, scope string, frames []reframer.Frame, round, totalRounds int, op ideationops.Operator, buildTarget string, stagePlan *StagePlan) string {
 	var sb strings.Builder
 
 	// Include persona if available
@@ -188,6 +208,25 @@ PROBLEM SCOPE:
 		sb.WriteString("HOW MIGHT WE:\n")
 		for _, frame := range frames {
 			sb.WriteString(fmt.Sprintf("- [%s] %s\n", frame.Lens, frame.HMW))
+		}
+		sb.WriteString("\n")
+	}
+
+	if stagePlan != nil && len(stagePlan.NonNegotiables) > 0 {
+		sb.WriteString("NON-NEGOTIABLE OUTCOMES:\n")
+		for _, item := range stagePlan.NonNegotiables {
+			sb.WriteString("- ")
+			sb.WriteString(item)
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+	if stagePlan != nil && len(stagePlan.Questions) > 0 {
+		sb.WriteString("KEY QUESTIONS TO SATISFY:\n")
+		for _, question := range stagePlan.Questions {
+			sb.WriteString("- ")
+			sb.WriteString(question)
+			sb.WriteString("\n")
 		}
 		sb.WriteString("\n")
 	}
@@ -229,7 +268,7 @@ Use at least one sketch tool to make your concept concrete.
 	return sb.String()
 }
 
-func (p *brainstormIDEO) runIdeationRoundBridge(ctx context.Context, sess protocol.Session, agents []agent.Agent, round, totalRounds int) error {
+func (p *brainstormIDEO) runIdeationRoundBridge(ctx context.Context, sess protocol.Session, agents []agent.Agent, round, totalRounds int) (agent.Message, error) {
 	runner := p.selectRunner(sess, agents)
 
 	system := `You are the moderator between ideation rounds.
@@ -243,52 +282,240 @@ Keep the momentum high. This is brainstorming at its best.`
 
 	user := fmt.Sprintf("Round %d/%d complete. Push for wilder ideas in round %d.", round, totalRounds, round+1)
 
-	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
+	resp, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
 		Messages:          []agent.Message{message.User(user)},
 		SystemMessages:    []agent.Message{message.System(system)},
 		Params:            p.runParamsFor(runner),
 		MaxToolIterations: 1,
 	})
-	return err
+	if err != nil {
+		return agent.Message{}, err
+	}
+	resp.Name = runner.Name
+	return resp, nil
 }
 
-func (p *brainstormIDEO) extractIdeationResults(thread []agent.Message) *IdeationResult {
+func (p *brainstormIDEO) extractIdeationResults(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, frames []reframer.Frame, thread []agent.Message, stagePlan *StagePlan) (*IdeationResult, error) {
 	result := &IdeationResult{
 		Concepts:  make([]ConceptCard, 0),
 		Artifacts: make([]Artifact, 0),
 	}
 
-	// Extract concepts from messages
-	for _, msg := range thread {
-		if msg.Role != agent.RoleAssistant || msg.Name == "" {
+	history, err := sess.History(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get ideation history: %w", err)
+	}
+
+	type outputEnvelope[T any] struct {
+		Status string `json:"status,omitempty"`
+		Card   T      `json:"card,omitempty"`
+	}
+	type diagramEnvelope struct {
+		Status   string   `json:"status,omitempty"`
+		Artifact Artifact `json:"artifact"`
+	}
+	type journeyEnvelope struct {
+		Status  string  `json:"status,omitempty"`
+		Journey Journey `json:"journey"`
+	}
+
+	conceptSeen := make(map[string]struct{})
+	artifactSeen := make(map[string]struct{})
+	addConcept := func(card ConceptCard) {
+		card.Title = strings.TrimSpace(card.Title)
+		card.Problem = strings.TrimSpace(card.Problem)
+		card.Mechanism = strings.TrimSpace(card.Mechanism)
+		card.Value = strings.TrimSpace(card.Value)
+		card.Risk = strings.TrimSpace(card.Risk)
+		if card.Title == "" || card.Mechanism == "" {
+			return
+		}
+		key := strings.ToLower(card.Title + "|" + card.Mechanism)
+		if _, exists := conceptSeen[key]; exists {
+			return
+		}
+		conceptSeen[key] = struct{}{}
+		result.Concepts = append(result.Concepts, card)
+	}
+	addArtifact := func(artifact Artifact) {
+		artifact.Type = strings.TrimSpace(artifact.Type)
+		artifact.Title = strings.TrimSpace(artifact.Title)
+		if artifact.Type == "" {
+			return
+		}
+		key := strings.ToLower(artifact.Type + "|" + artifact.Title)
+		if _, exists := artifactSeen[key]; exists {
+			return
+		}
+		artifactSeen[key] = struct{}{}
+		result.Artifacts = append(result.Artifacts, artifact)
+	}
+
+	for _, msg := range history {
+		if msg.Role != agent.RoleTool {
 			continue
 		}
+		switch strings.TrimSpace(msg.Name) {
+		case "sketch_concept_card":
+			if env, ok := decodeMessageJSONPart[outputEnvelope[ConceptCard]](msg); ok {
+				addConcept(env.Card)
+				addArtifact(Artifact{
+					Type:    "concept_card",
+					Title:   env.Card.Title,
+					Content: env.Card,
+					Author:  msg.Name,
+				})
+				continue
+			}
+			if card, ok := decodeMessageJSONPart[ConceptCard](msg); ok {
+				addConcept(card)
+				addArtifact(Artifact{
+					Type:    "concept_card",
+					Title:   card.Title,
+					Content: card,
+					Author:  msg.Name,
+				})
+			}
+		case "sketch_diagram":
+			if env, ok := decodeMessageJSONPart[diagramEnvelope](msg); ok {
+				artifact := env.Artifact
+				if artifact.Type == "" {
+					artifact.Type = "mermaid"
+				}
+				if artifact.Title == "" {
+					artifact.Title = "Diagram"
+				}
+				addArtifact(artifact)
+			}
+		case "sketch_journey":
+			if env, ok := decodeMessageJSONPart[journeyEnvelope](msg); ok {
+				journey := env.Journey
+				addArtifact(Artifact{
+					Type:    "journey",
+					Title:   strings.TrimSpace(journey.Title),
+					Content: journey,
+					Author:  msg.Name,
+				})
+			}
+		}
+	}
 
-		text := strings.TrimSpace(msg.Text())
+	extractedConcepts, err := p.summarizeIdeationConcepts(ctx, sess, agents, scope, frames, thread, result.Concepts, stagePlan)
+	if err != nil {
+		return nil, err
+	}
+	for _, concept := range extractedConcepts {
+		addConcept(concept)
+	}
+
+	target := p.cfg.TargetConcepts
+	if target <= 0 {
+		target = 15
+	}
+	if len(result.Concepts) > target {
+		result.Concepts = result.Concepts[:target]
+	}
+
+	return result, nil
+}
+
+func (p *brainstormIDEO) summarizeIdeationConcepts(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, frames []reframer.Frame, thread []agent.Message, existing []ConceptCard, stagePlan *StagePlan) ([]ConceptCard, error) {
+	runner := p.selectRunner(sess, agents)
+
+	var frameSummary strings.Builder
+	for _, frame := range frames {
+		if strings.TrimSpace(frame.HMW) == "" {
+			continue
+		}
+		frameSummary.WriteString(fmt.Sprintf("- [%s] %s\n", frame.Lens, frame.HMW))
+	}
+
+	var existingSummary strings.Builder
+	for _, card := range existing {
+		if strings.TrimSpace(card.Title) == "" {
+			continue
+		}
+		existingSummary.WriteString(fmt.Sprintf("- %s\n", card.Title))
+	}
+
+	snippets := make([]string, 0, 24)
+	for _, msg := range recentThread(thread, 20) {
+		text := strings.TrimSpace(agent.TextFromParts(msg.Parts))
+		if text == "" {
+			text = strings.TrimSpace(msg.Text())
+		}
 		if text == "" {
 			continue
 		}
-
-		// Create a concept card from the message
-		concept := ConceptCard{
-			Title:     truncate(text, 80),
-			Problem:   "Extracted from ideation discussion",
-			Mechanism: text,
-			Value:     "To be validated",
-			Risk:      "To be assessed",
+		author := strings.TrimSpace(msg.Name)
+		if author == "" {
+			author = string(msg.Role)
 		}
-		result.Concepts = append(result.Concepts, concept)
+		snippets = append(snippets, fmt.Sprintf("[%s] %s", author, truncate(text, 220)))
 	}
 
-	// Limit concepts
-	if len(result.Concepts) > p.cfg.TargetConcepts {
-		result.Concepts = result.Concepts[:p.cfg.TargetConcepts]
+	target := p.cfg.TargetConcepts
+	if target <= 0 {
+		target = 15
 	}
 
-	return result
+	type ideationSynthesis struct {
+		Concepts []ConceptCard `json:"concepts" description:"Distinct concept cards with title, problem, mechanism, value, and risk"`
+	}
+
+	system := `You are synthesizing the IDEATION phase.
+
+Goal:
+- Extract concrete, distinct concept cards from the discussion.
+- Use specific, decision-relevant language.
+- Avoid duplicates and avoid generic filler.
+
+Return only structured output matching the schema.`
+
+	var user strings.Builder
+	user.WriteString(fmt.Sprintf("Scope:\n%s\n\n", scope))
+	if stagePlan != nil && len(stagePlan.NonNegotiables) > 0 {
+		user.WriteString("Non-negotiables:\n")
+		for _, item := range stagePlan.NonNegotiables {
+			user.WriteString("- ")
+			user.WriteString(item)
+			user.WriteString("\n")
+		}
+		user.WriteString("\n")
+	}
+	if frameSummary.Len() > 0 {
+		user.WriteString("Selected How-Might-We frames:\n")
+		user.WriteString(frameSummary.String())
+		user.WriteString("\n")
+	}
+	if existingSummary.Len() > 0 {
+		user.WriteString("Concepts already captured from tools (do not duplicate):\n")
+		user.WriteString(existingSummary.String())
+		user.WriteString("\n")
+	}
+	user.WriteString(fmt.Sprintf("Extract up to %d concepts from these ideation snippets:\n", target))
+	user.WriteString(strings.Join(snippets, "\n"))
+
+	resp, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
+		Messages:          []agent.Message{message.User(user.String())},
+		SystemMessages:    []agent.Message{message.System(system)},
+		Params:            p.runParamsFor(runner),
+		MaxToolIterations: 1,
+		OutputSchema:      ideationSynthesis{},
+		Silent:            true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	synth, err := parseStructuredOutput[ideationSynthesis](resp)
+	if err != nil {
+		return nil, err
+	}
+	return synth.Concepts, nil
 }
 
-func (p *brainstormIDEO) runIdeationSynthesis(ctx context.Context, sess protocol.Session, agents []agent.Agent, result *IdeationResult) error {
+func (p *brainstormIDEO) runIdeationSynthesis(ctx context.Context, sess protocol.Session, agents []agent.Agent, result *IdeationResult) (agent.Message, error) {
 	runner := p.selectRunner(sess, agents)
 
 	system := `You are the moderator concluding the IDEATION phase.
@@ -304,13 +531,17 @@ Sound appreciative and forward-looking. The fun part is done, now we get rigorou
 	user.WriteString(fmt.Sprintf("Generated %d concepts and %d artifacts.\n", len(result.Concepts), len(result.Artifacts)))
 	user.WriteString("Synthesize and bridge to evidence phase.")
 
-	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
+	resp, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
 		Messages:          []agent.Message{message.User(user.String())},
 		SystemMessages:    []agent.Message{message.System(system)},
 		Params:            p.runParamsFor(runner),
 		MaxToolIterations: 1,
 	})
-	return err
+	if err != nil {
+		return agent.Message{}, err
+	}
+	resp.Name = runner.Name
+	return resp, nil
 }
 
 func (p *brainstormIDEO) ideationToolIDs() []string {

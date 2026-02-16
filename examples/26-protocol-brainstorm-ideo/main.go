@@ -105,10 +105,16 @@ func main() {
 	contextPlan := insightpack.Plan{
 		Strategy: insightpack.StrategyResearchHeavy,
 		Budget: insightpack.Budget{
-			MaxToolIterations: 8,
+			MaxToolIterations: 200,
 			MaxSources:        10,
 		},
 		RequireCitation: true,
+		Questions: []string{
+			"Where exactly does trial onboarding friction occur, and for which personas?",
+			"What baseline activation/TTV metrics and constraints are non-negotiable?",
+			"What prior experiments succeeded or failed, and why?",
+			"What evidence distinguishes onboarding comprehension issues from product-value issues?",
+		},
 		Sources: []insightpack.Source{
 			{
 				ID:          "org_memory",
@@ -136,14 +142,8 @@ func main() {
 			ideo.WithTargetConcepts(15),
 			ideo.WithFinalistCount(3),
 			ideo.WithArtifactTools(true),
-			ideo.WithHumanInLoop(true),
-			ideo.WithStakeholder(ideo.Stakeholder{
-				Name:    "Darko",
-				Email:   "darko.stanimirovic@gmail.com",
-				Role:    "Product Manager",
-				Context: "data classification, user experience, UI design, AI agentic design",
-			}),
-			ideo.WithTransferStrategy(ideo.TransferSummaryOnly),
+			ideo.WithHumanInLoop(false),
+			ideo.WithTransferStrategy(ideo.TransferWithHistory),
 		)).
 		Start(ctx)
 	if err != nil {
@@ -169,8 +169,8 @@ func buildRecallTool(docStore *memory.DocumentStore) *tool.TypedTool[RecallInput
 		// Perform semantic search over the document store
 		results, err := docStore.Search(ctx, memory.DocumentQuery{
 			Text:      query,
-			Limit:     12,
-			Threshold: 0.3, // Lower threshold to include more results
+			Limit:     8,
+			Threshold: 0.35,
 		})
 		if err != nil {
 			return RecallOutput{Notes: fmt.Sprintf("Search error: %v", err)}, nil
@@ -251,7 +251,8 @@ func buildModerator(eng *engine.Engine) agent.Agent {
 	return eng.Agent("Moderator").
 		Prompt(`You are the facilitation lead for this IDEO-style brainstorming session.
 Your role is to guide the discussion through distinct phases while ensuring psychological safety and creative freedom.
-Embody IDEO principles: defer judgment, encourage wild ideas, build on others' ideas, go for quantity, be visual.`).
+Embody IDEO principles: defer judgment, encourage wild ideas, build on others' ideas, go for quantity, be visual.
+Anchor conclusions in evidence from recall_context and explicitly separate facts from assumptions.`).
 		Build()
 }
 
@@ -259,7 +260,8 @@ func buildStrategist(eng *engine.Engine) agent.Agent {
 	return eng.Agent("Strategist").
 		Prompt(`You are a strategic thinker in this brainstorming session.
 Your Role: See the big picture, identify leverage points, think about long-term implications.
-You are a systems thinker, pragmatically ambitious, a pattern matcher, and risk-aware optimist.`).
+You are a systems thinker, pragmatically ambitious, a pattern matcher, and risk-aware optimist.
+Do not make claims without evidence, and cite concrete source paths when available.`).
 		Build()
 }
 
@@ -267,7 +269,8 @@ func buildBuilder(eng *engine.Engine) agent.Agent {
 	return eng.Agent("Builder").
 		Prompt(`You are a builder and implementer in this brainstorming session.
 Your Role: Ground ideas in reality. Think about how things actually get built.
-You are constructively skeptical, iteratively minded, detail-oriented, and hands-on.`).
+You are constructively skeptical, iteratively minded, detail-oriented, and hands-on.
+Translate ideas into concrete experiments with measurable signals and thresholds.`).
 		Build()
 }
 
@@ -275,7 +278,8 @@ func buildCritic(eng *engine.Engine) agent.Agent {
 	return eng.Agent("Critic").
 		Prompt(`You are a quality advocate and critical thinker in this brainstorming session.
 Your Role: Stress-test ideas, advocate for users, ensure we're solving the right problems.
-You are empathetically critical, user-obsessed, an assumption hunter, and quality-focused.`).
+You are empathetically critical, user-obsessed, an assumption hunter, and quality-focused.
+Force specificity: what assumption is being tested, by which cheapest test, with what success/failure threshold.`).
 		Build()
 }
 
@@ -288,7 +292,7 @@ func getTopicFromArgs() string {
 
 func printResults(result *engine.RunResult) {
 	fmt.Println("\n" + strings.Repeat("=", 80))
-	fmt.Println("IDEO BRAINSTORM RESULTS")
+	fmt.Println("BRAINSTORM RESULTS")
 	fmt.Println(strings.Repeat("=", 80))
 
 	// Check for rejection or info request
@@ -339,6 +343,22 @@ func printResults(result *engine.RunResult) {
 		}
 	}
 
+	if stagePlan, ok := result.Metadata["stage_plan"].(map[string]any); ok {
+		fmt.Println("\n─── STAGE PLAN ───")
+		if nonNegotiables, ok := stagePlan["non_negotiables"].([]string); ok && len(nonNegotiables) > 0 {
+			fmt.Println("\nNon-Negotiables:")
+			for i, item := range nonNegotiables[:minInt(5, len(nonNegotiables))] {
+				fmt.Printf("  %d. %s\n", i+1, truncateStr(item, 120))
+			}
+		}
+		if lenses, ok := stagePlan["lenses"].([]string); ok && len(lenses) > 0 {
+			fmt.Printf("\nLenses: %s\n", strings.Join(lenses[:minInt(6, len(lenses))], ", "))
+		}
+		if toolIDs, ok := stagePlan["tool_ids"].([]string); ok && len(toolIDs) > 0 {
+			fmt.Printf("Tools: %s\n", strings.Join(toolIDs, ", "))
+		}
+	}
+
 	if inspiration, ok := result.Metadata["inspiration"].(map[string]any); ok {
 		fmt.Println("\n─── PHASE 1: INSPIRATION ───")
 		if observations, ok := inspiration["observations"].([]string); ok && len(observations) > 0 {
@@ -382,11 +402,28 @@ func printResults(result *engine.RunResult) {
 		}
 	}
 
-	if result.Final != "" {
+	closing := strings.TrimSpace(result.ProtocolSummary)
+	if closing == "" {
+		if summary, ok := result.Metadata["summary"].(string); ok {
+			closing = strings.TrimSpace(summary)
+		}
+	}
+	if closing == "" {
+		if synthesis, ok := result.Metadata["synthesis"].(map[string]any); ok {
+			if synthesizedClosing, ok := synthesis["closing"].(string); ok {
+				closing = strings.TrimSpace(synthesizedClosing)
+			}
+		}
+	}
+	if closing == "" {
+		closing = strings.TrimSpace(result.Final)
+	}
+
+	if closing != "" {
 		fmt.Println("\n" + strings.Repeat("─", 80))
 		fmt.Println("📝 CLOSING SUMMARY")
 		fmt.Println(strings.Repeat("─", 80))
-		fmt.Println(result.Final)
+		fmt.Println(closing)
 	}
 
 	if os.Getenv("DUMP_METADATA_JSON") == "1" {

@@ -86,6 +86,7 @@ type Config struct {
 	DisciplineNudges   []string
 	MentalModelPrompts []string
 	UserVantagePoints  []string
+	LensCatalog        []string
 
 	// Runtime params passed to agent runs
 	Params map[string]any
@@ -97,23 +98,24 @@ type Config struct {
 // DefaultConfig returns a sensible default configuration.
 func DefaultConfig() Config {
 	return Config{
-		InspirationRounds: 2,
-		ReframeRounds:     3,
-		IdeationRounds:    2,
-		SynthesisRounds:   2,
-		TargetHMWs:        8,
-		TargetConcepts:    15,
-		FinalistCount:     3,
-		TransferStrategy:  TransferSummaryOnly,
-		ArtifactTools:     true,
-		HumanInLoop:       false,
-		HumanTimeout:      5 * time.Minute,
-		TimeoutBehavior:   TimeoutContinue,
-		ContextPlan:       insightpack.DefaultPlan(),
-		DisciplineNudges:  defaultDisciplineNudges(),
+		InspirationRounds:  2,
+		ReframeRounds:      3,
+		IdeationRounds:     2,
+		SynthesisRounds:    2,
+		TargetHMWs:         8,
+		TargetConcepts:     15,
+		FinalistCount:      3,
+		TransferStrategy:   TransferSummaryOnly,
+		ArtifactTools:      true,
+		HumanInLoop:        false,
+		HumanTimeout:       5 * time.Minute,
+		TimeoutBehavior:    TimeoutContinue,
+		ContextPlan:        insightpack.DefaultPlan(),
+		DisciplineNudges:   defaultDisciplineNudges(),
 		MentalModelPrompts: defaultMentalModelPrompts(),
 		UserVantagePoints:  defaultUserVantagePoints(),
-		MaxConcurrent:     4,
+		LensCatalog:        defaultLensCatalog(),
+		MaxConcurrent:      4,
 	}
 }
 
@@ -149,6 +151,23 @@ func defaultUserVantagePoints() []string {
 		"Teams collaborating together",
 		"Mobile users on the go",
 		"Desktop users with full attention",
+	}
+}
+
+func defaultLensCatalog() []string {
+	return []string{
+		"activation",
+		"operational",
+		"behavioral",
+		"workflow",
+		"adoption",
+		"trust",
+		"learning",
+		"friction",
+		"messaging",
+		"economic",
+		"systemic",
+		"radical",
 	}
 }
 
@@ -250,6 +269,11 @@ func WithUserVantagePoints(points []string) Option {
 	return func(c *Config) { c.UserVantagePoints = points }
 }
 
+// WithLensCatalog sets the candidate lenses for semantic stage planning.
+func WithLensCatalog(lenses []string) Option {
+	return func(c *Config) { c.LensCatalog = lenses }
+}
+
 // WithParams sets runtime parameters for agent execution.
 func WithParams(params map[string]any) Option {
 	return func(c *Config) { c.Params = params }
@@ -277,7 +301,7 @@ type TransferPacket struct {
 
 // Artifact is a structured output from sketch tools.
 type Artifact struct {
-	Type    string `json:"type"`    // mermaid, concept_card, journey, table
+	Type    string `json:"type"` // mermaid, concept_card, journey, table
 	Title   string `json:"title"`
 	Content any    `json:"content"` // Type-specific content
 	Author  string `json:"author"`
@@ -291,6 +315,16 @@ type ConceptCard struct {
 	Mechanism string `json:"mechanism"`
 	Value     string `json:"value"`
 	Risk      string `json:"risk"`
+}
+
+// StagePlan captures moderator-selected planning constraints for subsequent phases.
+type StagePlan struct {
+	ProblemStatement string   `json:"problem_statement,omitempty"`
+	NonNegotiables   []string `json:"non_negotiables,omitempty"`
+	Lenses           []string `json:"lenses,omitempty"`
+	ToolIDs          []string `json:"tool_ids,omitempty"`
+	Questions        []string `json:"questions,omitempty"`
+	Rationale        string   `json:"rationale,omitempty"`
 }
 
 // JourneyStage is one step in a user journey.

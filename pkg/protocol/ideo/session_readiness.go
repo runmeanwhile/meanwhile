@@ -29,12 +29,92 @@ const (
 
 // ReadinessResult contains the outcome of the readiness gate.
 type ReadinessResult struct {
-	Decision    ReadinessDecision `json:"decision"`
-	Assumptions []string          `json:"assumptions,omitempty"`
-	Missing     []string          `json:"missing,omitempty"`
-	Rejection   string            `json:"rejection,omitempty"`
-	Context     string            `json:"context,omitempty"` // Gathered context summary
-	RefinedScope string           `json:"refined_scope,omitempty"`
+	Decision     ReadinessDecision `json:"decision"`
+	Assumptions  []string          `json:"assumptions,omitempty"`
+	Missing      []string          `json:"missing,omitempty"`
+	Rejection    string            `json:"rejection,omitempty"`
+	Context      string            `json:"context,omitempty"` // Gathered context summary
+	RefinedScope string            `json:"refined_scope,omitempty"`
+}
+
+type readinessContextSummary struct {
+	Product     string   `json:"product" description:"What is known about the product/service in this problem context"`
+	Users       string   `json:"users" description:"What is known about user segments/personas and behavior"`
+	Market      string   `json:"market" description:"What is known about market/competitive context"`
+	Metrics     string   `json:"metrics" description:"What is known about KPIs, baselines, and targets"`
+	Strategy    string   `json:"strategy" description:"What is known about goals, north star, and strategic intent"`
+	Constraints []string `json:"constraints" description:"Known constraints that should shape recommendations"`
+	Gaps        []string `json:"gaps" description:"Critical unknowns or missing context"`
+	SourceRefs  []string `json:"source_refs,omitempty" description:"Source identifiers or document paths used for this summary"`
+	KeyFacts    []string `json:"key_facts,omitempty" description:"Most decision-relevant factual findings from available context"`
+}
+
+func (s readinessContextSummary) Render() string {
+	var sb strings.Builder
+	sb.WriteString("PRODUCT:\n")
+	sb.WriteString(strings.TrimSpace(s.Product))
+	sb.WriteString("\n\nUSERS:\n")
+	sb.WriteString(strings.TrimSpace(s.Users))
+	sb.WriteString("\n\nMARKET:\n")
+	sb.WriteString(strings.TrimSpace(s.Market))
+	sb.WriteString("\n\nMETRICS:\n")
+	sb.WriteString(strings.TrimSpace(s.Metrics))
+	sb.WriteString("\n\nSTRATEGY:\n")
+	sb.WriteString(strings.TrimSpace(s.Strategy))
+	if len(s.Constraints) > 0 {
+		sb.WriteString("\n\nCONSTRAINTS:\n")
+		for _, constraint := range s.Constraints {
+			if strings.TrimSpace(constraint) == "" {
+				continue
+			}
+			sb.WriteString("- ")
+			sb.WriteString(strings.TrimSpace(constraint))
+			sb.WriteString("\n")
+		}
+	}
+	if len(s.KeyFacts) > 0 {
+		sb.WriteString("\nKEY FACTS:\n")
+		for _, fact := range s.KeyFacts {
+			if strings.TrimSpace(fact) == "" {
+				continue
+			}
+			sb.WriteString("- ")
+			sb.WriteString(strings.TrimSpace(fact))
+			sb.WriteString("\n")
+		}
+	}
+	if len(s.Gaps) > 0 {
+		sb.WriteString("\nGAPS:\n")
+		for _, gap := range s.Gaps {
+			if strings.TrimSpace(gap) == "" {
+				continue
+			}
+			sb.WriteString("- ")
+			sb.WriteString(strings.TrimSpace(gap))
+			sb.WriteString("\n")
+		}
+	}
+	if len(s.SourceRefs) > 0 {
+		sb.WriteString("\nSOURCES:\n")
+		for _, ref := range s.SourceRefs {
+			if strings.TrimSpace(ref) == "" {
+				continue
+			}
+			sb.WriteString("- ")
+			sb.WriteString(strings.TrimSpace(ref))
+			sb.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+type readinessAssessment struct {
+	Decision     ReadinessDecision `json:"decision" description:"One of: proceed, proceed_with_assumptions, request_info, reject"`
+	Assumptions  []string          `json:"assumptions,omitempty" description:"Explicit assumptions required to proceed safely"`
+	Missing      []string          `json:"missing,omitempty" description:"Information needed from the requester before proceeding"`
+	Rejection    string            `json:"rejection,omitempty" description:"Reason to reject the request if decision is reject"`
+	RefinedScope string            `json:"refined_scope,omitempty" description:"Sharper problem framing for the team if proceeding"`
+	Rationale    string            `json:"rationale,omitempty" description:"Why this decision is appropriate for team productivity and quality"`
 }
 
 // runReadinessGate has the moderator assess whether there's enough context to proceed.
@@ -61,29 +141,15 @@ func (p *brainstormIDEO) runReadinessGate(ctx context.Context, sess protocol.Ses
 func (p *brainstormIDEO) gatherReadinessContext(ctx context.Context, sess protocol.Session, runner agent.Agent, scope string, seed agent.Message) (string, error) {
 	system := `You are the brainstorm moderator preparing to convene an IDEO-style session.
 
-BEFORE convening the team, you must gather context. A good brainstorm requires understanding:
-- What is the PRODUCT or service?
-- Who are the USERS (segments, personas)?
-- What is the MARKET context (competitors, trends)?
-- What are the KEY METRICS or KPIs?
-- What is the NORTH STAR or strategic goal?
-- What CONSTRAINTS exist (time, budget, tech)?
+Gather context before convening the team:
+- product/service definition and onboarding context
+- users/personas/segments
+- market + competitive positioning
+- baseline metrics, targets, and funnel bottlenecks
+- strategic intent + constraints
 
-YOUR TASK:
-1. Use your tools to gather as much context as possible about this problem
-2. Search for organizational memory, past decisions, user research, metrics, strategy docs
-3. Be thorough - call multiple tools with different queries if needed
-4. Summarize what you found (and what you couldn't find)
-
-After gathering, provide a CONTEXT SUMMARY with sections:
-- PRODUCT: What we know about the product/service
-- USERS: What we know about users
-- MARKET: What we know about competitive/market context  
-- METRICS: What we know about KPIs/success measures
-- STRATEGY: What we know about goals/north star
-- GAPS: What critical information is MISSING
-
-Be factual about what you found vs. what's unknown.`
+Use tools first; gather concrete facts and source references.
+Return only structured output matching the schema.`
 
 	userPrompt := fmt.Sprintf(`The team has been asked to brainstorm:
 """
@@ -92,65 +158,51 @@ Be factual about what you found vs. what's unknown.`
 
 Gather context before we proceed. Use your tools.`, scope)
 
-	// Allow generous tool budget for context gathering
+	// Use configured context tool budget (can be raised by the example/config).
+	toolBudget := p.cfg.ContextPlan.MaxToolIterations()
+	if toolBudget <= 0 {
+		toolBudget = 6
+	}
+
 	resp, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
 		Messages:          []agent.Message{PromptWithMedia(userPrompt, seed)},
 		SystemMessages:    []agent.Message{message.System(system)},
 		Params:            p.runParamsFor(runner),
-		MaxToolIterations: 6, // Allow multiple tool calls
+		MaxToolIterations: toolBudget,
 		Tools:             p.cfg.ContextPlan.AllowedToolIDs(),
 		ToolPolicy:        p.cfg.ContextPlan.ToolPolicy(),
+		OutputSchema:      readinessContextSummary{},
 	})
 	if err != nil {
 		return "", err
 	}
 
-	return resp.Text(), nil
+	summary, err := parseStructuredOutput[readinessContextSummary](resp)
+	if err != nil {
+		return "", err
+	}
+
+	return summary.Render(), nil
 }
 
 // assessReadiness has the moderator decide whether to proceed based on gathered context.
 func (p *brainstormIDEO) assessReadiness(ctx context.Context, sess protocol.Session, runner agent.Agent, scope string, contextSummary string) (*ReadinessResult, error) {
 	system := `You are the brainstorm moderator deciding whether to convene the session.
 
-Based on the context you gathered, you must make a DECISION:
+Decide one of:
+- proceed
+- proceed_with_assumptions
+- request_info
+- reject
 
-1. PROCEED - You have rich context. The problem is well-defined with clear product, users, metrics.
+Rules:
+- Prefer proceed when context is sufficient for actionable work.
+- Use proceed_with_assumptions when assumptions are explicit and testable.
+- Use request_info when missing inputs block responsible recommendations.
+- Use reject only when scope is unsuitable or incoherent.
+- Preserve explicit business outcomes and targets from the original request when refining scope.
 
-2. PROCEED_WITH_ASSUMPTIONS - Context is incomplete but you can make reasonable assumptions.
-   You MUST explicitly state your assumptions so the team (and stakeholders) know what you're working with.
-   This protects the team - they'll be judged by results, so assumptions must be transparent.
-
-3. REQUEST_INFO - Critical information is missing that you cannot reasonably assume.
-   Specify exactly what you need from the requester.
-   
-4. REJECT - The request is too vague, inappropriate, or impossible to address productively.
-   Explain why.
-
-DECISION CRITERIA:
-- Can you define WHO the users are (even if assumed)?
-- Can you define WHAT success looks like (even if assumed)?
-- Is the problem scoped enough to generate actionable ideas?
-- Would the team waste time without more context?
-
-Respond with your decision in this exact format:
-
-DECISION: [PROCEED | PROCEED_WITH_ASSUMPTIONS | REQUEST_INFO | REJECT]
-
-If PROCEED_WITH_ASSUMPTIONS, list each assumption:
-ASSUMPTION: [Your assumption about product/users/market/metrics]
-ASSUMPTION: [Another assumption]
-...
-
-If REQUEST_INFO, list what's needed:
-MISSING: [What specific information you need]
-MISSING: [Another piece of needed information]
-...
-
-If REJECT:
-REJECTION: [Why this request cannot proceed]
-
-Finally, if proceeding, provide:
-REFINED_SCOPE: [A more specific version of the problem statement incorporating your context/assumptions]`
+Return only structured output matching the schema.`
 
 	userPrompt := fmt.Sprintf(`Original request:
 """
@@ -171,74 +223,31 @@ but also don't be so restrictive that you block reasonable work.`, scope, contex
 		SystemMessages:    []agent.Message{message.System(system)},
 		Params:            p.runParamsFor(runner),
 		MaxToolIterations: 1,
+		OutputSchema:      readinessAssessment{},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return parseReadinessDecision(resp.Text(), contextSummary), nil
-}
-
-// parseReadinessDecision extracts structured decision from moderator's response.
-func parseReadinessDecision(text, contextSummary string) *ReadinessResult {
-	result := &ReadinessResult{
-		Decision: DecisionProceedWithAssumptions, // Default to proceeding with assumptions
-		Context:  contextSummary,
+	assessment, err := parseStructuredOutput[readinessAssessment](resp)
+	if err != nil {
+		return nil, err
 	}
 
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		upper := strings.ToUpper(line)
-
-		// Parse decision
-		if strings.HasPrefix(upper, "DECISION:") {
-			decision := strings.TrimSpace(strings.TrimPrefix(line, "DECISION:"))
-			decision = strings.TrimSpace(strings.TrimPrefix(decision, "decision:"))
-			switch strings.ToUpper(decision) {
-			case "PROCEED":
-				result.Decision = DecisionProceed
-			case "PROCEED_WITH_ASSUMPTIONS":
-				result.Decision = DecisionProceedWithAssumptions
-			case "REQUEST_INFO":
-				result.Decision = DecisionRequestInfo
-			case "REJECT":
-				result.Decision = DecisionReject
-			}
-		}
-
-		// Parse assumptions
-		if strings.HasPrefix(upper, "ASSUMPTION:") {
-			assumption := strings.TrimSpace(strings.TrimPrefix(line, "ASSUMPTION:"))
-			assumption = strings.TrimSpace(strings.TrimPrefix(assumption, "assumption:"))
-			if assumption != "" {
-				result.Assumptions = append(result.Assumptions, assumption)
-			}
-		}
-
-		// Parse missing info
-		if strings.HasPrefix(upper, "MISSING:") {
-			missing := strings.TrimSpace(strings.TrimPrefix(line, "MISSING:"))
-			missing = strings.TrimSpace(strings.TrimPrefix(missing, "missing:"))
-			if missing != "" {
-				result.Missing = append(result.Missing, missing)
-			}
-		}
-
-		// Parse rejection reason
-		if strings.HasPrefix(upper, "REJECTION:") {
-			result.Rejection = strings.TrimSpace(strings.TrimPrefix(line, "REJECTION:"))
-			result.Rejection = strings.TrimSpace(strings.TrimPrefix(result.Rejection, "rejection:"))
-		}
-
-		// Parse refined scope
-		if strings.HasPrefix(upper, "REFINED_SCOPE:") {
-			result.RefinedScope = strings.TrimSpace(strings.TrimPrefix(line, "REFINED_SCOPE:"))
-			result.RefinedScope = strings.TrimSpace(strings.TrimPrefix(result.RefinedScope, "refined_scope:"))
-		}
+	switch assessment.Decision {
+	case DecisionProceed, DecisionProceedWithAssumptions, DecisionRequestInfo, DecisionReject:
+	default:
+		return nil, fmt.Errorf("invalid readiness decision %q", assessment.Decision)
 	}
 
-	return result
+	return &ReadinessResult{
+		Decision:     assessment.Decision,
+		Assumptions:  deduplicateStrings(assessment.Assumptions),
+		Missing:      deduplicateStrings(assessment.Missing),
+		Rejection:    strings.TrimSpace(assessment.Rejection),
+		Context:      contextSummary,
+		RefinedScope: strings.TrimSpace(assessment.RefinedScope),
+	}, nil
 }
 
 // formatAssumptionsForTeam creates a prompt section informing the team of assumptions.

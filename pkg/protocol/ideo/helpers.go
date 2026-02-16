@@ -91,6 +91,32 @@ func selectNudge(nudges []string, round int) string {
 	return nudges[(round-1)%len(nudges)]
 }
 
+// buildRoundLensGroups distributes selected lenses across rounds.
+func buildRoundLensGroups(lenses []string, rounds int) [][]string {
+	cleaned := deduplicateStrings(lenses)
+	if len(cleaned) == 0 {
+		cleaned = defaultLensCatalog()
+	}
+	if rounds <= 0 {
+		rounds = 1
+	}
+
+	groups := make([][]string, rounds)
+	for i := 0; i < rounds; i++ {
+		groups[i] = make([]string, 0)
+	}
+	for i, lens := range cleaned {
+		idx := i % rounds
+		groups[idx] = append(groups[idx], lens)
+	}
+	for i := range groups {
+		if len(groups[i]) == 0 {
+			groups[i] = append(groups[i], cleaned[i%len(cleaned)])
+		}
+	}
+	return groups
+}
+
 // truncate shortens a string to max length.
 func truncate(s string, maxLen int) string {
 	s = strings.TrimSpace(s)
@@ -290,8 +316,8 @@ type ConceptCardOutput struct {
 
 // JourneyInput is the input for the sketch_journey tool.
 type JourneyInput struct {
-	Title  string            `json:"title" description:"Name for this journey"`
-	Stages []JourneyStageIn  `json:"stages" description:"List of journey stages"`
+	Title  string           `json:"title" description:"Name for this journey"`
+	Stages []JourneyStageIn `json:"stages" description:"List of journey stages"`
 }
 
 // JourneyStageIn is a stage in the journey input.

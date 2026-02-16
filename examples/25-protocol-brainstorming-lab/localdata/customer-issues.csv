@@ -1,6 +1,0 @@
-issue_id,team,symptom,evidence,priority
-OPS-214,operations,Action items stall after week 4,"Owners are named but not revisited in following meetings",high
-OPS-227,operations,Meetings feel repetitive,"Same KPI agenda replayed each week with low discussion variance",medium
-OPS-231,logistics,Low accountability visibility,"Participants unclear on who owns cross-team blockers",high
-OPS-244,retail,Follow-through improves with named owner,"Teams using explicit owner check-ins show better closure",medium
-

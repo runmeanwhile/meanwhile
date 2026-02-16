@@ -25,6 +25,7 @@ type Bet struct {
 // Classify maps a card to a bet type using risk labels and lightweight heuristics.
 func Classify(card evidencegate.Card) BetType {
 	risk := strings.ToLower(strings.TrimSpace(card.RiskLevel))
+	confidence := strings.ToLower(strings.TrimSpace(card.Confidence))
 	switch {
 	case strings.Contains(risk, "low"), strings.Contains(risk, "safe"):
 		return BetSafe
@@ -34,17 +35,10 @@ func Classify(card evidencegate.Card) BetType {
 		return BetAdjacent
 	}
 
-	text := strings.ToLower(strings.TrimSpace(card.Concept + " " + card.Title))
 	switch {
-	case strings.Contains(text, "new platform"),
-		strings.Contains(text, "transform"),
-		strings.Contains(text, "replace workflow"),
-		strings.Contains(text, "ai co-pilot"):
+	case strings.Contains(confidence, "low"):
 		return BetBold
-	case strings.Contains(text, "optimize"),
-		strings.Contains(text, "improve"),
-		strings.Contains(text, "tweak"),
-		strings.Contains(text, "incremental"):
+	case strings.Contains(confidence, "high"):
 		return BetSafe
 	default:
 		return BetAdjacent

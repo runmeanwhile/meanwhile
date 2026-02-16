@@ -2,6 +2,7 @@ package ideo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -34,20 +35,24 @@ type InspirationResult struct {
 
 // runInspiration executes the inspiration phase.
 // Goal: Empathize, observe, gather tensions before jumping to solutions.
-func (p *brainstormIDEO) runInspiration(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, seed agent.Message, readiness *ReadinessResult) (*InspirationResult, error) {
+func (p *brainstormIDEO) runInspiration(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, seed agent.Message, readiness *ReadinessResult, stagePlan *StagePlan) (*InspirationResult, error) {
 	rounds := p.cfg.InspirationRounds
 	if rounds <= 0 {
 		rounds = 2
 	}
 
-	// Kick off with moderator framing (includes assumptions if any)
-	if err := p.runInspirationKickoff(ctx, sess, agents, scope, readiness); err != nil {
-		return nil, err
-	}
-
 	// Run discovery rounds
 	rt := roundtable.New(roundtable.WithMaxRounds(rounds))
 	rt.Record(seed)
+
+	// Kick off with moderator framing (includes assumptions if any)
+	kickoff, err := p.runInspirationKickoff(ctx, sess, agents, scope, readiness)
+	if err != nil {
+		return nil, err
+	}
+	if kickoff.Role != "" {
+		rt.Record(kickoff)
+	}
 
 	// Include assumptions as context for the team
 	if readiness != nil && len(readiness.Assumptions) > 0 {
@@ -58,6 +63,10 @@ func (p *brainstormIDEO) runInspiration(ctx context.Context, sess protocol.Sessi
 	rt.Record(message.User("Before proposing solutions, investigate this problem. Use tools to find evidence. Surface tensions and observations."))
 
 	turnToolBudget := max(p.cfg.ContextPlan.MaxToolIterations()/max(1, rounds*len(agents)), 2)
+	activeTools := p.cfg.ContextPlan.AllowedToolIDs()
+	if stagePlan != nil && len(stagePlan.ToolIDs) > 0 {
+		activeTools = stagePlan.ToolIDs
+	}
 
 	for rt.CurrentRound() < rt.MaxRounds() {
 		currentRound := rt.IncrementRound()
@@ -92,14 +101,14 @@ func (p *brainstormIDEO) runInspiration(ctx context.Context, sess protocol.Sessi
 				idx+1, len(ordered),
 			)))
 
-			system := p.buildInspirationPromptWithHistory(participant, scope, currentRound, rounds, nudge, mentalModel, toolCalls)
+			system := p.buildInspirationPromptWithHistory(participant, scope, currentRound, rounds, nudge, mentalModel, toolCalls, stagePlan)
 
 			resp, err := sess.RunAgent(ctx, participant, protocol.RunRequest{
 				Messages:          messages,
 				SystemMessages:    []agent.Message{message.System(system)},
 				Params:            p.runParamsFor(participant),
 				MaxToolIterations: turnToolBudget,
-				Tools:             p.cfg.ContextPlan.AllowedToolIDs(),
+				Tools:             activeTools,
 				ToolPolicy:        p.cfg.ContextPlan.ToolPolicy(),
 			})
 			if err != nil {
@@ -112,13 +121,16 @@ func (p *brainstormIDEO) runInspiration(ctx context.Context, sess protocol.Sessi
 	}
 
 	// Extract structured insights from the thread
-	result := p.extractInspirationInsights(rt.Thread())
+	result, err := p.summarizeInspiration(ctx, sess, agents, scope, rt.Thread(), stagePlan)
+	if err != nil {
+		return nil, err
+	}
 	result.Thread = rt.Thread()
 
 	return result, nil
 }
 
-func (p *brainstormIDEO) runInspirationKickoff(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, readiness *ReadinessResult) error {
+func (p *brainstormIDEO) runInspirationKickoff(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, readiness *ReadinessResult) (agent.Message, error) {
 	runner := p.selectRunner(sess, agents)
 
 	// Build system prompt - include assumptions if proceeding with them
@@ -165,20 +177,25 @@ Be transparent - the team's recommendations will be judged, so they need to know
 
 	userBuilder.WriteString("Begin the inspiration phase.")
 
-	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
+	resp, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
 		Messages:          []agent.Message{message.User(userBuilder.String())},
 		SystemMessages:    []agent.Message{message.System(systemBuilder.String())},
 		Params:            p.runParamsFor(runner),
 		MaxToolIterations: 1,
 	})
-	return err
+	if err != nil {
+		return agent.Message{}, err
+	}
+	resp.Name = runner.Name
+	return resp, nil
 }
 
 // toolCallInfo represents a tool call extracted from history.
 type toolCallInfo struct {
-	AgentID string
-	ToolID  string
-	Content string // Truncated content from tool result
+	ToolID     string
+	Query      string
+	Findings   []string
+	SourceRefs []string
 }
 
 // extractToolCallsFromHistory extracts tool call information from session history.
@@ -186,18 +203,133 @@ func extractToolCallsFromHistory(history []agent.Message) []toolCallInfo {
 	var calls []toolCallInfo
 	for _, msg := range history {
 		if msg.Role == agent.RoleTool {
-			content := msg.Text()
-			if len(content) > 200 {
-				content = content[:200] + "..."
+			info := toolCallInfo{
+				ToolID: strings.TrimSpace(msg.Name),
 			}
-			calls = append(calls, toolCallInfo{
-				AgentID: msg.Name, // Tool ID is stored in Name for tool messages
-				ToolID:  msg.Name,
-				Content: content,
-			})
+
+			info.Query = extractToolQuery(msg.Metadata)
+
+			var recall struct {
+				Hits []struct {
+					Source  string  `json:"source"`
+					Summary string  `json:"summary"`
+					Detail  string  `json:"detail,omitempty"`
+					Score   float64 `json:"score,omitempty"`
+				} `json:"hits"`
+				Notes string `json:"notes,omitempty"`
+			}
+			if parsed, ok := decodeMessageJSONPart[struct {
+				Hits []struct {
+					Source  string  `json:"source"`
+					Summary string  `json:"summary"`
+					Detail  string  `json:"detail,omitempty"`
+					Score   float64 `json:"score,omitempty"`
+				} `json:"hits"`
+				Notes string `json:"notes,omitempty"`
+			}](msg); ok {
+				recall = parsed
+			}
+
+			if len(recall.Hits) > 0 {
+				for _, hit := range recall.Hits {
+					if strings.TrimSpace(hit.Summary) == "" && strings.TrimSpace(hit.Source) == "" {
+						continue
+					}
+					finding := strings.TrimSpace(hit.Summary)
+					if finding == "" {
+						finding = strings.TrimSpace(hit.Source)
+					}
+					if detail := strings.TrimSpace(hit.Detail); detail != "" {
+						finding = fmt.Sprintf("%s | %s", finding, truncate(detail, 220))
+					}
+					if hit.Score > 0 {
+						finding = fmt.Sprintf("%s (score %.2f)", finding, hit.Score)
+					}
+					info.Findings = append(info.Findings, truncate(finding, 160))
+					if src := strings.TrimSpace(hit.Source); src != "" {
+						info.SourceRefs = append(info.SourceRefs, src)
+					}
+				}
+			} else {
+				content := strings.TrimSpace(agent.TextFromParts(msg.Parts))
+				if content == "" {
+					content = strings.TrimSpace(msg.Text())
+				}
+				if content != "" {
+					info.Findings = append(info.Findings, truncate(content, 180))
+				}
+			}
+
+			info.SourceRefs = deduplicateStrings(info.SourceRefs)
+			calls = append(calls, info)
 		}
 	}
 	return calls
+}
+
+func extractToolQuery(metadata map[string]any) string {
+	if metadata == nil {
+		return ""
+	}
+	if q, ok := metadata["query"].(string); ok {
+		return strings.TrimSpace(q)
+	}
+	rawArgs, ok := metadata["arguments"]
+	if !ok {
+		return ""
+	}
+
+	var payload []byte
+	switch value := rawArgs.(type) {
+	case json.RawMessage:
+		payload = append([]byte(nil), value...)
+	case []byte:
+		payload = append([]byte(nil), value...)
+	case string:
+		payload = []byte(strings.TrimSpace(value))
+	default:
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return ""
+		}
+		payload = encoded
+	}
+
+	var args map[string]any
+	if err := json.Unmarshal(payload, &args); err != nil {
+		return ""
+	}
+	return extractQueryFromMap(args)
+}
+
+func extractQueryFromMap(data map[string]any) string {
+	if len(data) == 0 {
+		return ""
+	}
+	keys := []string{"query", "q", "question", "search", "term", "text", "prompt"}
+	for _, key := range keys {
+		value, ok := data[key]
+		if !ok {
+			continue
+		}
+		asText, ok := value.(string)
+		if !ok {
+			continue
+		}
+		if trimmed := strings.TrimSpace(asText); trimmed != "" {
+			return trimmed
+		}
+	}
+	for _, key := range []string{"input", "args", "parameters"} {
+		nested, ok := data[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		if query := extractQueryFromMap(nested); query != "" {
+			return query
+		}
+	}
+	return ""
 }
 
 // formatToolCallSummaryFromHistory creates a message showing what tools have been called.
@@ -209,13 +341,22 @@ func formatToolCallSummaryFromHistory(calls []toolCallInfo) string {
 	var sb strings.Builder
 	sb.WriteString("📋 TEAM'S TOOL CALLS SO FAR (do NOT repeat these queries):\n")
 	for i, call := range calls {
-		sb.WriteString(fmt.Sprintf("%d. [%s] was called", i+1, call.ToolID))
-		if call.Content != "" {
-			content := call.Content
-			if len(content) > 150 {
-				content = content[:150] + "..."
+		toolID := call.ToolID
+		if toolID == "" {
+			toolID = "tool"
+		}
+		sb.WriteString(fmt.Sprintf("%d. [%s] was called", i+1, toolID))
+		if call.Query != "" {
+			sb.WriteString(fmt.Sprintf("\n   → Query: %s", truncate(call.Query, 120)))
+		}
+		for idx, finding := range call.Findings {
+			if idx >= 2 {
+				break
 			}
-			sb.WriteString(fmt.Sprintf("\n   → Result: %s", content))
+			sb.WriteString(fmt.Sprintf("\n   → Finding: %s", truncate(finding, 150)))
+		}
+		if len(call.SourceRefs) > 0 {
+			sb.WriteString(fmt.Sprintf("\n   → Sources: %s", strings.Join(call.SourceRefs[:min(2, len(call.SourceRefs))], ", ")))
 		}
 		sb.WriteString("\n")
 	}
@@ -223,7 +364,7 @@ func formatToolCallSummaryFromHistory(calls []toolCallInfo) string {
 	return sb.String()
 }
 
-func (p *brainstormIDEO) buildInspirationPromptWithHistory(participant agent.Agent, scope string, round, totalRounds int, nudge, mentalModel string, toolCalls []toolCallInfo) string {
+func (p *brainstormIDEO) buildInspirationPromptWithHistory(participant agent.Agent, scope string, round, totalRounds int, nudge, mentalModel string, toolCalls []toolCallInfo, stagePlan *StagePlan) string {
 	var sb strings.Builder
 
 	// Include persona if available
@@ -252,17 +393,39 @@ MINDSET:
 
 `)
 
+	if stagePlan != nil && len(stagePlan.NonNegotiables) > 0 {
+		sb.WriteString("NON-NEGOTIABLE OUTCOMES:\n")
+		for _, item := range stagePlan.NonNegotiables {
+			sb.WriteString("- ")
+			sb.WriteString(item)
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+	if stagePlan != nil && len(stagePlan.Questions) > 0 {
+		sb.WriteString("KEY QUESTIONS TO ANSWER:\n")
+		for _, question := range stagePlan.Questions {
+			sb.WriteString("- ")
+			sb.WriteString(question)
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
 	// Add prior tool calls from history - this is CRITICAL for avoiding redundant queries
 	if len(toolCalls) > 0 {
 		sb.WriteString("🔍 TOOLS ALREADY CALLED (from session history):\n")
 		for _, call := range toolCalls {
-			sb.WriteString(fmt.Sprintf("- [%s]", call.ToolID))
-			if call.Content != "" {
-				content := call.Content
-				if len(content) > 100 {
-					content = content[:100] + "..."
-				}
-				sb.WriteString(fmt.Sprintf(" → %s", content))
+			toolID := call.ToolID
+			if toolID == "" {
+				toolID = "tool"
+			}
+			sb.WriteString(fmt.Sprintf("- [%s]", toolID))
+			if len(call.Findings) > 0 {
+				sb.WriteString(fmt.Sprintf(" → %s", truncate(call.Findings[0], 120)))
+			}
+			if len(call.SourceRefs) > 0 {
+				sb.WriteString(fmt.Sprintf(" [source: %s]", call.SourceRefs[0]))
 			}
 			sb.WriteString("\n")
 		}
@@ -280,6 +443,15 @@ MINDSET:
 	}
 
 	// Add tools section
+	if stagePlan != nil && len(stagePlan.ToolIDs) > 0 {
+		sb.WriteString("PRIORITIZED TOOLS FOR THIS SESSION:\n")
+		for _, toolID := range stagePlan.ToolIDs {
+			sb.WriteString("- ")
+			sb.WriteString(toolID)
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
 	sb.WriteString(formatToolsSection(p.cfg.ContextPlan))
 	sb.WriteString("\n\n")
 
@@ -290,6 +462,10 @@ MINDSET:
 4. End with an open question for the next person
 
 Respond in your own voice. Be specific and grounded. 3-5 sentences.`)
+
+	if p.cfg.ContextPlan.RequireCitation {
+		sb.WriteString("\n\nEvidence discipline: cite concrete sources in-line like [wiki/product/activation-metrics.md].")
+	}
 
 	return sb.String()
 }
@@ -358,48 +534,105 @@ Respond in your own voice. Be specific and grounded. 3-5 sentences.`)
 	return sb.String()
 }
 
-func (p *brainstormIDEO) extractInspirationInsights(thread []agent.Message) *InspirationResult {
-	result := &InspirationResult{
-		Tensions:     make([]string, 0),
-		Observations: make([]string, 0),
-		Constraints:  make([]string, 0),
-		KeyQuotes:    make([]string, 0),
-		Artifacts:    make([]Artifact, 0),
+func (p *brainstormIDEO) summarizeInspiration(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, thread []agent.Message, stagePlan *StagePlan) (*InspirationResult, error) {
+	runner := p.selectRunner(sess, agents)
+
+	history, err := sess.History(ctx)
+	if err != nil {
+		return nil, err
 	}
+	toolCalls := extractToolCallsFromHistory(history)
 
-	// Extract insights from assistant messages
-	// This is a simplified extraction - in production you might use LLM-based extraction
-	for _, msg := range thread {
-		if msg.Role != agent.RoleAssistant || msg.Name == "" {
-			continue
+	var snippets []string
+	for _, msg := range recentThread(thread, 18) {
+		text := strings.TrimSpace(agent.TextFromParts(msg.Parts))
+		if text == "" {
+			text = strings.TrimSpace(msg.Text())
 		}
-
-		text := strings.TrimSpace(msg.Text())
 		if text == "" {
 			continue
 		}
-
-		// Look for tension/friction indicators
-		lower := strings.ToLower(text)
-		if strings.Contains(lower, "tension") ||
-			strings.Contains(lower, "friction") ||
-			strings.Contains(lower, "problem") ||
-			strings.Contains(lower, "pain point") ||
-			strings.Contains(lower, "struggle") {
-			// Add as observation (could be more sophisticated)
-			result.Observations = append(result.Observations, truncate(text, 200))
-		} else {
-			result.Observations = append(result.Observations, truncate(text, 200))
+		prefix := strings.TrimSpace(string(msg.Role))
+		if msg.Name != "" {
+			prefix = msg.Name
 		}
+		snippets = append(snippets, fmt.Sprintf("[%s] %s", prefix, truncate(text, 220)))
 	}
 
-	// Deduplicate and limit
-	result.Observations = deduplicateStrings(result.Observations)
+	type inspirationSynthesis struct {
+		Tensions     []string `json:"tensions" description:"Most decision-relevant tensions/frictions discovered"`
+		Observations []string `json:"observations" description:"Factual observations grounded in evidence"`
+		Constraints  []string `json:"constraints" description:"Known constraints that should shape solution design"`
+		KeyQuotes    []string `json:"key_quotes,omitempty" description:"Optional direct quotes that reveal user reality"`
+	}
+
+	system := `You are synthesizing the INSPIRATION phase.
+
+Goal:
+- Extract evidence-grounded tensions, observations, and constraints.
+- Prioritize concrete findings that change strategy decisions.
+- Keep claims specific and non-generic.
+
+Return only structured output matching the schema.`
+
+	var user strings.Builder
+	user.WriteString(fmt.Sprintf("Scope:\n%s\n\n", scope))
+	if stagePlan != nil && len(stagePlan.NonNegotiables) > 0 {
+		user.WriteString("Non-negotiables:\n")
+		for _, item := range stagePlan.NonNegotiables {
+			user.WriteString("- ")
+			user.WriteString(item)
+			user.WriteString("\n")
+		}
+		user.WriteString("\n")
+	}
+	if len(toolCalls) > 0 {
+		user.WriteString("Tool evidence summary:\n")
+		user.WriteString(formatToolCallSummaryFromHistory(toolCalls))
+		user.WriteString("\n\n")
+	}
+	user.WriteString("Discussion snippets:\n")
+	user.WriteString(strings.Join(snippets, "\n"))
+
+	resp, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
+		Messages:          []agent.Message{message.User(user.String())},
+		SystemMessages:    []agent.Message{message.System(system)},
+		Params:            p.runParamsFor(runner),
+		MaxToolIterations: 1,
+		OutputSchema:      inspirationSynthesis{},
+		Silent:            true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	synth, err := parseStructuredOutput[inspirationSynthesis](resp)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &InspirationResult{
+		Tensions:     deduplicateStrings(synth.Tensions),
+		Observations: deduplicateStrings(synth.Observations),
+		Constraints:  deduplicateStrings(synth.Constraints),
+		KeyQuotes:    deduplicateStrings(synth.KeyQuotes),
+		Artifacts:    make([]Artifact, 0),
+	}
+
 	if len(result.Observations) > 10 {
 		result.Observations = result.Observations[:10]
 	}
+	if len(result.Tensions) > 10 {
+		result.Tensions = result.Tensions[:10]
+	}
+	if len(result.Constraints) > 8 {
+		result.Constraints = result.Constraints[:8]
+	}
+	if len(result.KeyQuotes) > 6 {
+		result.KeyQuotes = result.KeyQuotes[:6]
+	}
 
-	return result
+	return result, nil
 }
 
 // buildInspirationTransfer creates a transfer packet from inspiration results.

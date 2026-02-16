@@ -3,6 +3,7 @@ package ideo
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/runmeanwhile/meanwhile/pkg/agent"
 	"github.com/runmeanwhile/meanwhile/pkg/collab/minutes"
@@ -36,17 +37,18 @@ func (p *brainstormIDEO) Participants() []protocol.Participant { return nil }
 // Config returns the protocol configuration.
 func (p *brainstormIDEO) Config() protocol.Config {
 	return protocol.Config{
-		"scope":               p.cfg.Scope,
-		"inspiration_rounds":  p.cfg.InspirationRounds,
-		"reframe_rounds":      p.cfg.ReframeRounds,
-		"ideation_rounds":     p.cfg.IdeationRounds,
-		"synthesis_rounds":    p.cfg.SynthesisRounds,
-		"target_hmws":         p.cfg.TargetHMWs,
-		"target_concepts":     p.cfg.TargetConcepts,
-		"finalist_count":      p.cfg.FinalistCount,
-		"transfer_strategy":   string(p.cfg.TransferStrategy),
-		"artifact_tools":      p.cfg.ArtifactTools,
-		"human_in_loop":       p.cfg.HumanInLoop,
+		"scope":              p.cfg.Scope,
+		"inspiration_rounds": p.cfg.InspirationRounds,
+		"reframe_rounds":     p.cfg.ReframeRounds,
+		"ideation_rounds":    p.cfg.IdeationRounds,
+		"synthesis_rounds":   p.cfg.SynthesisRounds,
+		"target_hmws":        p.cfg.TargetHMWs,
+		"target_concepts":    p.cfg.TargetConcepts,
+		"finalist_count":     p.cfg.FinalistCount,
+		"transfer_strategy":  string(p.cfg.TransferStrategy),
+		"artifact_tools":     p.cfg.ArtifactTools,
+		"human_in_loop":      p.cfg.HumanInLoop,
+		"lens_catalog":       p.cfg.LensCatalog,
 	}
 }
 
@@ -74,6 +76,7 @@ func (p *brainstormIDEO) OnMessage(ctx context.Context, sess protocol.Session, m
 
 	// Resolve scope from message or config
 	scope := p.resolveScope(msg)
+	originalScope := scope
 
 	//
 	// PHASE 0: READINESS GATE
@@ -95,17 +98,22 @@ func (p *brainstormIDEO) OnMessage(ctx context.Context, sess protocol.Session, m
 		return p.emitInfoRequest(sess, readinessResult)
 
 	case DecisionProceed, DecisionProceedWithAssumptions:
-		// Continue with potentially refined scope
-		if readinessResult.RefinedScope != "" {
-			scope = readinessResult.RefinedScope
-		}
+		// Continue using original scope while preserving refined framing in stage plan.
+	}
+
+	stagePlan, err := p.runStagePlan(ctx, sess, agents, scope, readinessResult)
+	if err != nil {
+		return fmt.Errorf("stage plan: %w", err)
+	}
+	if stagePlan != nil && strings.TrimSpace(stagePlan.ProblemStatement) != "" {
+		scope = strings.TrimSpace(stagePlan.ProblemStatement)
 	}
 
 	//
 	// PHASE 1: INSPIRATION
 	// Goal: Empathize, observe, gather tensions before jumping to solutions
 	//
-	inspirationResult, err := p.runInspiration(ctx, sess, agents, scope, msg, readinessResult)
+	inspirationResult, err := p.runInspiration(ctx, sess, agents, scope, msg, readinessResult, stagePlan)
 	if err != nil {
 		return fmt.Errorf("inspiration phase: %w", err)
 	}
@@ -115,7 +123,7 @@ func (p *brainstormIDEO) OnMessage(ctx context.Context, sess protocol.Session, m
 	// PHASE 2: REFRAME
 	// Goal: Generate diverse HMW framings across multiple lenses
 	//
-	reframeResult, err := p.runReframe(ctx, sess, agents, scope, inspirationTransfer)
+	reframeResult, err := p.runReframe(ctx, sess, agents, scope, inspirationTransfer, stagePlan)
 	if err != nil {
 		return fmt.Errorf("reframe phase: %w", err)
 	}
@@ -125,7 +133,7 @@ func (p *brainstormIDEO) OnMessage(ctx context.Context, sess protocol.Session, m
 	// PHASE 3: IDEATION
 	// Goal: Generate divergent concepts with wild ideas and artifact-based thinking
 	//
-	ideationResult, err := p.runIdeation(ctx, sess, agents, scope, reframeTransfer)
+	ideationResult, err := p.runIdeation(ctx, sess, agents, scope, reframeTransfer, stagePlan)
 	if err != nil {
 		return fmt.Errorf("ideation phase: %w", err)
 	}
@@ -135,7 +143,18 @@ func (p *brainstormIDEO) OnMessage(ctx context.Context, sess protocol.Session, m
 	// PHASE 4: SYNTHESIS
 	// Goal: Converge to experiment-ready portfolio with evidence gates
 	//
-	synthesisResult, err := p.runSynthesis(ctx, sess, agents, scope, ideationTransfer)
+	synthesisResult, err := p.runSynthesis(
+		ctx,
+		sess,
+		agents,
+		scope,
+		readinessResult,
+		inspirationResult,
+		reframeResult,
+		ideationResult,
+		ideationTransfer,
+		stagePlan,
+	)
 	if err != nil {
 		return fmt.Errorf("synthesis phase: %w", err)
 	}
@@ -143,8 +162,12 @@ func (p *brainstormIDEO) OnMessage(ctx context.Context, sess protocol.Session, m
 	// Build final result
 	mins := minutes.New()
 	mins.Add("scope", scope)
+	mins.Add("original_scope", originalScope)
 	mins.Add("participants", agentNames(agents))
 	mins.Add("config", p.Config())
+	if stagePlan != nil {
+		mins.Add("stage_plan", stagePlan)
+	}
 
 	// Include readiness gate results
 	mins.Add("readiness", map[string]any{
@@ -289,10 +312,10 @@ func agentNames(agents []agent.Agent) []string {
 // emitRejection emits a protocol action indicating the request was rejected.
 func (p *brainstormIDEO) emitRejection(sess protocol.Session, result *ReadinessResult) error {
 	payload := map[string]any{
-		"status":    "rejected",
-		"reason":    result.Rejection,
-		"context":   result.Context,
-		"message":   "The brainstorming request was rejected by the moderator due to insufficient clarity or scope.",
+		"status":  "rejected",
+		"reason":  result.Rejection,
+		"context": result.Context,
+		"message": "The brainstorming request was rejected by the moderator due to insufficient clarity or scope.",
 	}
 	p.lastResult = payload
 	return sess.Emit(event.New(event.ProtocolAction, sess.ID(), payload))
@@ -301,10 +324,10 @@ func (p *brainstormIDEO) emitRejection(sess protocol.Session, result *ReadinessR
 // emitInfoRequest emits a protocol action requesting more information from the user.
 func (p *brainstormIDEO) emitInfoRequest(sess protocol.Session, result *ReadinessResult) error {
 	payload := map[string]any{
-		"status":    "info_requested",
-		"missing":   result.Missing,
-		"context":   result.Context,
-		"message":   "The moderator needs more information before the team can proceed productively.",
+		"status":  "info_requested",
+		"missing": result.Missing,
+		"context": result.Context,
+		"message": "The moderator needs more information before the team can proceed productively.",
 	}
 	p.lastResult = payload
 	return sess.Emit(event.New(event.ProtocolAction, sess.ID(), payload))

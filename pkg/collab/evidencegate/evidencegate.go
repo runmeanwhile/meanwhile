@@ -12,6 +12,11 @@ type Card struct {
 	SuccessThreshold string `json:"success_threshold"`
 	FailureThreshold string `json:"failure_threshold"`
 	TimeToLearn      string `json:"time_to_learn"`
+	BaselineMetric   string `json:"baseline_metric,omitempty"`
+	TargetMetric     string `json:"target_metric,omitempty"`
+	ExpectedDelta    string `json:"expected_delta,omitempty"`
+	Segment          string `json:"segment,omitempty"`
+	TimeToImpact     string `json:"time_to_impact,omitempty"`
 	RiskLevel        string `json:"risk_level,omitempty"`
 	EvidenceRefs     string `json:"evidence_refs,omitempty"`
 	Confidence       string `json:"confidence,omitempty"`

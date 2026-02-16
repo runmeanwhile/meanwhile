@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -39,6 +40,9 @@ var (
 )
 
 const defaultMaxToolIterations = 4
+
+// debugLLMCalls enables verbose logging of LLM requests when MEANWHILE_DEBUG_LLM=1
+var debugLLMCalls = os.Getenv("MEANWHILE_DEBUG_LLM") == "1"
 
 // RunAgent executes an agent against the provider and streams events.
 func (s *Session) RunAgent(ctx context.Context, a agent.Agent, req protocol.RunRequest) (agent.Message, error) {
@@ -158,6 +162,12 @@ func (s *Session) RunAgent(ctx context.Context, a agent.Agent, req protocol.RunR
 			runErr = err
 			return agent.Message{}, err
 		}
+
+		// Debug logging: show exactly what goes to the LLM
+		if debugLLMCalls {
+			debugLogLLMRequest(a.Name, attempt, selected)
+		}
+
 		message, toolCalls, err := s.runProviderStream(spanCtx, p, provider.Request{
 			Model:    model,
 			Messages: selected,
@@ -654,4 +664,58 @@ func ensureRequiredAllProperties(schema map[string]any, props map[string]any) {
 			return
 		}
 	}
+}
+
+// debugLogLLMRequest logs the full message payload being sent to the LLM.
+// Enable with MEANWHILE_DEBUG_LLM=1
+func debugLogLLMRequest(agentName string, attempt int, messages []agent.Message) {
+	fmt.Fprintf(os.Stderr, "\n╔══════════════════════════════════════════════════════════════════════════════\n")
+	fmt.Fprintf(os.Stderr, "║ LLM REQUEST: Agent=%s, Attempt=%d, Messages=%d\n", agentName, attempt, len(messages))
+	fmt.Fprintf(os.Stderr, "╠══════════════════════════════════════════════════════════════════════════════\n")
+
+	for i, msg := range messages {
+		role := string(msg.Role)
+		name := msg.Name
+		text := msg.Text()
+
+		// Truncate long messages for readability
+		if len(text) > 500 {
+			text = text[:500] + "... [TRUNCATED]"
+		}
+
+		if name != "" {
+			fmt.Fprintf(os.Stderr, "║ [%d] %s (%s):\n", i, role, name)
+		} else {
+			fmt.Fprintf(os.Stderr, "║ [%d] %s:\n", i, role)
+		}
+
+		// Indent message content
+		lines := strings.Split(text, "\n")
+		for _, line := range lines {
+			if len(line) > 100 {
+				line = line[:100] + "..."
+			}
+			fmt.Fprintf(os.Stderr, "║     %s\n", line)
+		}
+
+		// Show parts summary
+		if len(msg.Parts) > 1 || (len(msg.Parts) == 1 && msg.Parts[0].Type != agent.ContentPartText) {
+			fmt.Fprintf(os.Stderr, "║     [%d parts: ", len(msg.Parts))
+			partTypes := make(map[agent.ContentPartType]int)
+			for _, p := range msg.Parts {
+				partTypes[p.Type]++
+			}
+			first := true
+			for pt, count := range partTypes {
+				if !first {
+					fmt.Fprintf(os.Stderr, ", ")
+				}
+				fmt.Fprintf(os.Stderr, "%s=%d", pt, count)
+				first = false
+			}
+			fmt.Fprintf(os.Stderr, "]\n")
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "╚══════════════════════════════════════════════════════════════════════════════\n\n")
 }

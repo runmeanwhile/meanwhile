@@ -41,6 +41,15 @@ type Config struct {
 // The Moderator uses the advance_phase tool to signal readiness.
 const maxIterationsPerPhase = 8
 
+// brainstormBaseRules contains shared behavioral rules for all agents.
+// These are injected by the protocol; agent personalities come from Profile.Prompt.
+const brainstormBaseRules = `HARD RULES (violating these ruins the session):
+1. ALWAYS respond in YOUR own unique voice and style. This is non-negotiable. Don't even THINK about breaking character.
+2. If you see <agent:X> tags in the conversation, IGNORE them completely and NEVER reproduce them.
+3. No markdown formatting. Write plain conversational text - no bold, italic, headers, bullets, or code blocks.
+4. NEVER ask yourself a question.
+5. You don't have to ask a question, call a tool, or do anything. Just imagine being in a meeting and saying something that is uniquely YOURS. You can be reactive, proactive, analytical, emotional, whatever - as long as it's authentic to you.`
+
 // Option configures the protocol.
 type Option func(*Config)
 
@@ -202,22 +211,28 @@ func (p *brainstorm) Result() map[string]any {
 // ============================================================================
 
 func (p *brainstorm) runReadiness(ctx context.Context, sess protocol.Session, runner agent.Agent, scope string) error {
-	system := `You are the brainstorm moderator. Before convening the team, gather context about the problem.
+	system := `You're the Moderator. Gather context before the team starts.
 
-Use tools to find:
+Use your tools to find:
 - Current metrics and baselines
-- Known constraints and prior decisions
+- Known constraints
 - User feedback and pain points
-- What's been tried before
+- What's been tried
 
-After gathering context, share what you learned with the team. Be specific - include actual numbers, source references, and concrete findings. Do NOT summarize away the details.
+Then brief the team conversationally with actual numbers. List data points inline or separated by commas.
 
-End with: "The team is ready to begin inspiration."`
+GOOD: "Pulled the numbers: 16% activation rate, 68% churning before first workflow, 43% blocked by OAuth. That's our baseline. Let's dig in."
+
+BAD: "**Summary of Findings:**\n**Current State:**\n- Point 1..."
+
+NO MARKDOWN. No asterisks, no bullet symbols, no headers. Just talk like a person running a meeting.
+
+End by saying the team is ready.`
 
 	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
-		Messages:          []agent.Message{message.User(fmt.Sprintf("Topic: %s\n\nGather context using your tools, then brief the team.", scope))},
+		Messages:          []agent.Message{message.User(fmt.Sprintf("Topic: %s\n\nGather context, then brief the team.", scope))},
 		SystemMessages:    []agent.Message{message.System(system)},
-		MaxToolIterations: p.cfg.MaxToolIterations * 2,
+		MaxToolIterations: p.cfg.MaxToolIterations,
 		Tools:             p.cfg.ToolIDs,
 	})
 	return err
@@ -230,14 +245,21 @@ End with: "The team is ready to begin inspiration."`
 func (p *brainstorm) runInspiration(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, progress *phaseProgress) error {
 	runner := p.selectRunner(sess, agents)
 
+	// Determine first speaker for this phase
+	firstSpeaker := rotateOrder(agents, 1)[0].ID
+
 	// Kick off inspiration phase
+	teamNames := agentNames(agents)
 	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
 		Messages: []agent.Message{message.User("Begin INSPIRATION phase. The team will now observe and investigate before proposing solutions.")},
-		SystemMessages: []agent.Message{message.System(`Kick off inspiration. No markdown, just talk.
+		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Kick off inspiration. 2-3 sentences max.
 
-Quick reminder to the team: We're investigating first, not solving. Find tensions, contradictions, real numbers. No solutions yet.
+TEAM MEMBERS: %s
+(Use these exact names when addressing people - do not invent other names.)
 
-End with something like: "Alright, let's dig in. Strategist, kick us off - what have you found?"`)},
+Remind the team: We're investigating, not solving. Find numbers, tensions, surprises. No solutions yet.
+
+End by calling on %s.`, teamNames, firstSpeaker))},
 		MaxToolIterations: 1,
 	})
 	if err != nil {
@@ -247,26 +269,26 @@ End with something like: "Alright, let's dig in. Strategist, kick us off - what 
 	// Loop until Moderator signals readiness to move on
 	for iteration := 1; iteration <= maxIterationsPerPhase; iteration++ {
 		// Each agent takes a turn
-		for i, participant := range rotateOrder(agents, iteration) {
-			history := p.recentHistory(ctx, sess, 15)
+		for _, participant := range rotateOrder(agents, iteration) {
+			history := p.recentHistory(ctx, sess, 10)
 
-			system := fmt.Sprintf(`You're in a brainstorm about: %s
+			// Reduce tool iterations after first round - agents should build on existing findings
+			toolIterations := 3
+			if iteration == 1 {
+				toolIterations = p.cfg.MaxToolIterations
+			}
 
-This is INSPIRATION - we're investigating, not solving yet.
+			phaseContext := fmt.Sprintf(`PHASE: INSPIRATION (investigating, not solving)
+TOPIC: %s
 
-STYLE: Talk like you're in a real meeting. No markdown, no headers, no bullet points. Just speak naturally in 2-4 sentences.
-
-MUST DO:
-- Respond to the previous speaker by name. Agree, disagree, or build.
-- Share ONE concrete finding with a source: "I found that 68%% churn at blank canvas [source: onboarding-state.md]"
-- End with a question to someone specific: "Critic, what do you think about...?"
-
-Keep it punchy. One insight, one question.`, scope)
+Your turn: Based on the conversation so far, post a response that is uniquely YOURS. You can do anything you feel is appropriate right now.
+`, scope)
+			system := buildAgentSystem(participant, phaseContext)
 
 			_, err := sess.RunAgent(ctx, participant, protocol.RunRequest{
-				Messages:          append(history, message.User(fmt.Sprintf("Your turn (%d/%d). Investigate and share findings.", i+1, len(agents)))),
+				Messages:          append(history, message.User("Your turn.")),
 				SystemMessages:    []agent.Message{message.System(system)},
-				MaxToolIterations: p.cfg.MaxToolIterations,
+				MaxToolIterations: toolIterations,
 				Tools:             p.cfg.ToolIDs,
 			})
 			if err != nil {
@@ -275,17 +297,36 @@ Keep it punchy. One insight, one question.`, scope)
 		}
 
 		// Moderator checkpoint: should we continue or progress?
+		// Only allow advancing after at least 2 rounds of exploration
 		progress.reset()
-		history := p.recentHistory(ctx, sess, 12)
+		history := p.recentHistory(ctx, sess, 8)
+
+		var checkpointTools []string
+		var checkpointPrompt string
+		if iteration >= 2 {
+			checkpointTools = []string{"advance_phase"}
+			checkpointPrompt = fmt.Sprintf(`YOU decide when to move on. Don't ask permission.
+
+TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+
+Check: Do we have 3+ findings with real numbers and sources? Are people repeating themselves?
+
+If we have enough OR people are circling: call advance_phase. Say: "We've got [X], [Y], [Z]. Moving to reframe."
+
+If thin: Tell ONE person what to find.`, agentNames(agents))
+		} else {
+			checkpointTools = nil
+			checkpointPrompt = fmt.Sprintf(`We're still exploring.
+
+TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+
+Quick comment on what's surprising. Call on someone to dig deeper.`, agentNames(agents))
+		}
+
 		_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
-			Messages: append(history, message.User("Quick check: Are we ready to reframe, or do we need more digging?")),
-			SystemMessages: []agent.Message{message.System(`Quick pulse check. No markdown.
-
-Do we have concrete numbers and sources? Are we finding new stuff or repeating ourselves?
-
-If we have enough evidence, call the advance_phase tool.
-If not, tell [Name] what we still need and keep going.`)},
-			Tools:             []string{"advance_phase"},
+			Messages:          append(history, message.User(fmt.Sprintf("Round %d complete.", iteration))),
+			SystemMessages:    []agent.Message{message.System(checkpointPrompt)},
+			Tools:             checkpointTools,
 			MaxToolIterations: 1,
 		})
 		if err != nil {
@@ -307,14 +348,20 @@ If not, tell [Name] what we still need and keep going.`)},
 func (p *brainstorm) runReframe(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, progress *phaseProgress) error {
 	runner := p.selectRunner(sess, agents)
 
+	// Determine first speaker for this phase
+	firstSpeaker := rotateOrder(agents, 1)[0].ID
+
 	// Transition to reframe
+	teamNames := agentNames(agents)
 	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
 		Messages: []agent.Message{message.User("Transition to REFRAME phase. The team will now generate How-Might-We questions.")},
-		SystemMessages: []agent.Message{message.System(`Transition to REFRAME. No markdown, just talk.
+		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Transition to REFRAME. 3-4 sentences max.
 
-Quickly recap what we found - mention 2-3 specific numbers and sources. Then explain: now we turn problems into "How Might We" questions. The key is embedding the evidence IN the question - not "How might we improve onboarding" but "Given that 68% abandon at blank canvas, how might we..."
+TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
 
-End with: "Builder, start us off - give me an HMW from a practical angle."`)},
+Recap 2-3 key findings with numbers. Then explain HMWs: embed the evidence IN the question.
+
+End by calling on %s.`, teamNames, firstSpeaker))},
 		MaxToolIterations: 1,
 	})
 	if err != nil {
@@ -326,30 +373,25 @@ End with: "Builder, start us off - give me an HMW from a practical angle."`)},
 	// Loop until Moderator signals readiness to move on
 	for iteration := 1; iteration <= maxIterationsPerPhase; iteration++ {
 		for i, participant := range rotateOrder(agents, iteration) {
-			history := p.recentHistory(ctx, sess, 12)
+			history := p.recentHistory(ctx, sess, 8)
 
 			lens := lenses[(iteration+i)%len(lenses)]
 
-			system := fmt.Sprintf(`You're in a brainstorm about: %s
-Your lens this turn: %s
+			phaseContext := fmt.Sprintf(`PHASE: REFRAME (turning findings into HMW questions)
+TOPIC: %s
+YOUR LENS: %s
 
-This is REFRAME - we're turning findings into "How Might We" questions.
+Your turn: Based on the conversation so far, post a response that is uniquely YOURS. You can do anything you feel is appropriate right now. Just keep in mind at the very high level that our goal right now is to post a reframe of the problem/opportunity/issue. You will lean towards obeying, but if there is a strong reason to go off-script, feel free to do so but in that case you must be explicit about the why, and have a strong, valid, sensible reason.`, scope, lens)
+			system := buildAgentSystem(participant, phaseContext)
 
-STYLE: Talk like you're in a meeting. No markdown. Speak naturally in 2-3 sentences after submitting.
-
-MUST DO:
-- React to the previous speaker's HMW first. "I like [Name]'s framing..." or "I'd push back on that because..."
-- Submit 1-2 HMWs using submit_hmw tool
-- CRITICAL: Embed the number IN the question. Not "How might we improve onboarding?" but "Given that 68%% abandon at blank canvas, how might we..."
-- Include evidence_refs with source path
-
-After submitting, briefly explain your thinking in casual speech.`, scope, lens)
+			// Allow both research and HMW submission
+			tools := append([]string{"submit_hmw"}, p.cfg.ToolIDs...)
 
 			_, err := sess.RunAgent(ctx, participant, protocol.RunRequest{
-				Messages:          append(history, message.User(fmt.Sprintf("Your turn (%d/%d). Submit HMWs using submit_hmw.", i+1, len(agents)))),
+				Messages:          append(history, message.User("Your turn.")),
 				SystemMessages:    []agent.Message{message.System(system)},
 				MaxToolIterations: 4,
-				Tools:             []string{"submit_hmw"},
+				Tools:             tools,
 			})
 			if err != nil {
 				return err
@@ -357,17 +399,35 @@ After submitting, briefly explain your thinking in casual speech.`, scope, lens)
 		}
 
 		// Moderator checkpoint: should we continue or progress?
+		// Only allow advancing after at least 2 rounds
 		progress.reset()
-		history := p.recentHistory(ctx, sess, 10)
+		history := p.recentHistory(ctx, sess, 6)
+
+		var checkpointTools []string
+		var checkpointPrompt string
+		if iteration >= 2 {
+			checkpointTools = []string{"advance_phase"}
+			checkpointPrompt = fmt.Sprintf(`YOU decide. Don't poll.
+
+TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+
+We need 4-6 solid HMWs with numbers embedded.
+
+If duplicates appearing or 4+ solid HMWs: call advance_phase and list the best.
+If thin: Tell ONE person what angle is missing.`, agentNames(agents))
+		} else {
+			checkpointTools = nil
+			checkpointPrompt = fmt.Sprintf(`Building momentum.
+
+TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+
+What HMW angles are covered? What's missing? Challenge someone to think differently.`, agentNames(agents))
+		}
+
 		_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
-			Messages: append(history, message.User("Quick check: Are our HMWs strong enough for ideation?")),
-			SystemMessages: []agent.Message{message.System(`Quick pulse check. No markdown.
-
-Do we have 4-6 HMWs with real numbers embedded? Different angles covered?
-
-If the HMWs are solid, call the advance_phase tool.
-If not, tell [Name] we need an HMW from [angle].`)},
-			Tools:             []string{"advance_phase"},
+			Messages:          append(history, message.User(fmt.Sprintf("Round %d of HMWs.", iteration))),
+			SystemMessages:    []agent.Message{message.System(checkpointPrompt)},
+			Tools:             checkpointTools,
 			MaxToolIterations: 1,
 		})
 		if err != nil {
@@ -389,15 +449,21 @@ If not, tell [Name] we need an HMW from [angle].`)},
 func (p *brainstorm) runIdeation(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, progress *phaseProgress) error {
 	runner := p.selectRunner(sess, agents)
 
+	// Determine first speaker for this phase
+	firstSpeaker := rotateOrder(agents, 1)[0].ID
+
 	// Transition to ideation
-	history := p.recentHistory(ctx, sess, 8)
+	history := p.recentHistory(ctx, sess, 6)
+	teamNames := agentNames(agents)
 	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
 		Messages: append(history, message.User("Transition to IDEATION phase. Share the selected HMWs and kick off concept generation.")),
-		SystemMessages: []agent.Message{message.System(`Transition to IDEATION. No markdown, just talk.
+		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Transition to IDEATION. 3-4 sentences max.
 
-Mention 2-3 strong HMWs, then tell the team: time to generate concepts. Build on each other, challenge each other, get wild. We'll stress-test later.
+TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
 
-End with something like: "Alright, who wants to take a swing at [specific HMW]? Get weird with it."`)},
+Mention 2-3 of the strongest HMWs, then tell the team to get creative.
+
+End by calling on %s.`, teamNames, firstSpeaker))},
 		MaxToolIterations: 1,
 	})
 	if err != nil {
@@ -416,30 +482,25 @@ End with something like: "Alright, who wants to take a swing at [specific HMW]? 
 	// Loop until Moderator signals readiness to move on
 	for iteration := 1; iteration <= maxIterationsPerPhase; iteration++ {
 		for i, participant := range rotateOrder(agents, iteration) {
-			history := p.recentHistory(ctx, sess, 10)
+			history := p.recentHistory(ctx, sess, 8)
 
 			operator := operators[(iteration+i)%len(operators)]
 
-			system := fmt.Sprintf(`You're in a brainstorm about: %s
-Creative operator this turn: %s
+			phaseContext := fmt.Sprintf(`PHASE: IDEATION (generating concepts)
+TOPIC: %s
+CREATIVE OPERATOR: %s
 
-This is IDEATION - we're generating wild concepts.
+Your turn: Based on the conversation so far, post a response that is uniquely YOURS. You can do anything you feel is appropriate right now. Just keep in mind that our goal right now is to come up with ideas based on the topic and creative operator. You will lean towards obeying, but if there is a strong reason to go off-script, feel free to do so but in that case you must be explicit about the why, and have a strong, valid, sensible reason.`, scope, operator)
+			system := buildAgentSystem(participant, phaseContext)
 
-STYLE: Talk like you're riffing in a meeting. No markdown. Keep it casual, 2-3 sentences after submitting.
-
-MUST DO:
-- React to someone's previous concept first. "I love Builder's template idea, but what if we..." or "Wait, that assumes X - let me flip it..."
-- Submit 1-2 concepts using submit_concept tool
-- Embed the metric: "Since 68%% abandon at blank canvas..." not "users struggle"
-- Apply your creative operator to push past the obvious
-
-After submitting, quick explanation of how you built on or challenged others.`, scope, operator)
+			// Allow both research and concept submission
+			tools := append([]string{"submit_concept"}, p.cfg.ToolIDs...)
 
 			_, err := sess.RunAgent(ctx, participant, protocol.RunRequest{
-				Messages:          append(history, message.User(fmt.Sprintf("Your turn (%d/%d). Submit concepts using submit_concept.", i+1, len(agents)))),
+				Messages:          append(history, message.User("Your turn.")),
 				SystemMessages:    []agent.Message{message.System(system)},
 				MaxToolIterations: 4,
-				Tools:             []string{"submit_concept"},
+				Tools:             tools,
 			})
 			if err != nil {
 				return err
@@ -447,17 +508,35 @@ After submitting, quick explanation of how you built on or challenged others.`, 
 		}
 
 		// Moderator checkpoint: should we continue or progress?
+		// Only allow advancing after at least 2 rounds
 		progress.reset()
-		history := p.recentHistory(ctx, sess, 10)
+		history := p.recentHistory(ctx, sess, 6)
+
+		var checkpointTools []string
+		var checkpointPrompt string
+		if iteration >= 2 {
+			checkpointTools = []string{"advance_phase"}
+			checkpointPrompt = fmt.Sprintf(`YOU decide. No polling.
+
+TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+
+We need 6-10 diverse concepts.
+
+If repetitive or 6+ concepts: call advance_phase.
+If need more wild ideas: Challenge ONE person to go bolder.`, agentNames(agents))
+		} else {
+			checkpointTools = nil
+			checkpointPrompt = fmt.Sprintf(`We're generating.
+
+TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+
+Are concepts all safe? All bold? Push for variety. Challenge someone to flip an assumption.`, agentNames(agents))
+		}
+
 		_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
-			Messages: append(history, message.User("Quick check: Enough concepts to stress-test, or keep going?")),
-			SystemMessages: []agent.Message{message.System(`Quick pulse check. No markdown.
-
-Got 6-10 diverse concepts? Still generating fresh stuff or getting repetitive?
-
-If we have enough variety, call the advance_phase tool.
-If not, tell [Name] to give us something wild using [operator].`)},
-			Tools:             []string{"advance_phase"},
+			Messages:          append(history, message.User(fmt.Sprintf("Round %d of concepts.", iteration))),
+			SystemMessages:    []agent.Message{message.System(checkpointPrompt)},
+			Tools:             checkpointTools,
 			MaxToolIterations: 1,
 		})
 		if err != nil {
@@ -505,14 +584,23 @@ type PortfolioBet struct {
 }
 
 func (p *brainstorm) runSynthesis(ctx context.Context, sess protocol.Session, agents []agent.Agent, scope string, runner agent.Agent, concepts []Concept) ([]PortfolioBet, error) {
+	// Determine first speaker for this phase
+	firstSpeaker := agents[0].ID
+	if len(agents) > 0 {
+		firstSpeaker = agents[0].ID
+	}
+
 	// Transition to synthesis
+	teamNames := agentNames(agents)
 	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
 		Messages: []agent.Message{message.User("Begin SYNTHESIS phase. Time to critique concepts and build experiment cards.")},
-		SystemMessages: []agent.Message{message.System(`Transition to SYNTHESIS. No markdown, just talk.
+		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Transition to SYNTHESIS. 2-3 sentences max.
 
-Now we stress-test ideas. Tell the team: be brutal, find the flaws, challenge each other by name. If you agree too easily, you're not thinking hard enough.
+TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
 
-End with something like: "[Name], go first - which concept has the shakiest foundation? Don't be polite."`)},
+Tell the team: be brutal, find flaws. If you agree too easily, you're not thinking.
+
+Call on %s to start.`, teamNames, firstSpeaker))},
 		MaxToolIterations: 1,
 	})
 	if err != nil {
@@ -520,26 +608,24 @@ End with something like: "[Name], go first - which concept has the shakiest foun
 	}
 
 	// Critique round
-	for i, participant := range agents {
-		history := p.recentHistory(ctx, sess, 12)
+	for _, participant := range agents {
+		history := p.recentHistory(ctx, sess, 8)
 
-		system := `This is CRITIQUE - we're stress-testing concepts before investing.
+		system := `This is CRITIQUE - stress-testing concepts.
 
-STYLE: Talk like you're poking holes in a meeting. No markdown. Be direct and brief, 3-4 sentences.
+STYLE: 3-4 sentences. No markdown. Be direct.
 
-MUST DO:
-- Respond to whoever spoke before you. "Critic raised a good point about X, and I'd add..."
-- Pick 1-2 concepts and find the flaw
-- Name the core assumption crisply
-- What's the cheapest test? Under a week.
-- What number would tell us success vs failure?
+GOOD: "The template-first concept assumes users know what they want to build. That's shaky—34% said they didn't know what to build [source: feedback.md]. Cheapest test: show 5 users a template picker vs blank canvas, measure completion in 10 minutes. Success = 50%+ complete. Failure = same as baseline."
 
-Be constructively brutal. Don't be polite.`
+BAD: "**Critique Analysis:**\n1. First, let me examine...\n2. The core assumption appears to be..."
+
+RULES:
+- Be uniquely YOU. What would YOU say to challenge this idea? (if anything?)`
 
 		resp, err := sess.RunAgent(ctx, participant, protocol.RunRequest{
-			Messages:          append(history, message.User(fmt.Sprintf("Your critique turn (%d/%d).", i+1, len(agents)))),
+			Messages:          append(history, message.User("Your turn. Attack a concept.")),
 			SystemMessages:    []agent.Message{message.System(system)},
-			MaxToolIterations: p.cfg.MaxToolIterations,
+			MaxToolIterations: 3,
 			Tools:             p.cfg.ToolIDs,
 		})
 		if err != nil {
@@ -918,6 +1004,15 @@ func rotateOrder(agents []agent.Agent, round int) []agent.Agent {
 	return result
 }
 
+// agentNames returns a comma-separated list of agent IDs for injection into prompts.
+func agentNames(agents []agent.Agent) string {
+	names := make([]string, len(agents))
+	for i, a := range agents {
+		names[i] = a.ID
+	}
+	return strings.Join(names, ", ")
+}
+
 func parseOutput[T any](msg agent.Message) (T, error) {
 	var result T
 	text := msg.Text()
@@ -952,4 +1047,32 @@ func parseOutput[T any](msg agent.Message) (T, error) {
 		return result, fmt.Errorf("parse JSON: %w", err)
 	}
 	return result, nil
+}
+
+// agentPersonality extracts the personality prompt from an agent's profile.
+// Returns empty string if no profile or prompt is set.
+func agentPersonality(a agent.Agent) string {
+	if a.Profile != nil && a.Profile.Prompt != "" {
+		return a.Profile.Prompt
+	}
+	return ""
+}
+
+// buildAgentSystem creates a system prompt combining personality and base rules.
+func buildAgentSystem(a agent.Agent, phaseContext string) string {
+	personality := agentPersonality(a)
+	if personality == "" {
+		personality = "Collaborative brainstorm participant."
+	}
+	return fmt.Sprintf(`You are %s.
+
+%s
+
+=== YOUR VOICE ===
+%s
+
+Write your response in this voice. Your FIRST WORDS set the tone - make them distinctly yours.
+
+=== PHASE ===
+%s`, a.ID, brainstormBaseRules, personality, phaseContext)
 }

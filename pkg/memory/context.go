@@ -178,6 +178,17 @@ func extractMessage(ev event.Event) (agent.Message, bool) {
 				if result.Error != nil && !hasPartType(parts, agent.ContentPartText) && result.Error.Message != "" {
 					parts = append(parts, agent.ContentPart{Type: agent.ContentPartText, Text: result.Error.Message})
 				}
+
+				// Add agent attribution to first text part so other agents know who ran the tool
+				if ev.AgentID != "" {
+					for i, p := range parts {
+						if p.Type == agent.ContentPartText && p.Text != "" {
+							parts[i].Text = fmt.Sprintf("[%s's %s result] %s", ev.AgentID, result.ToolID, p.Text)
+							break
+						}
+					}
+				}
+
 				return agent.Message{
 					Role:       agent.RoleTool,
 					Name:       result.ToolID,

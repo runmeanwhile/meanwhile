@@ -398,3 +398,55 @@ type Citation struct {
 2. **Should we keep TransferStrategy as an option?** Probably not - it's a footgun that encourages bad patterns.
 3. **How do we handle very long histories?** Keep rolling window but ensure tool messages are preserved.
 4. **Should collab packages be protocol-specific?** Current "reusable" abstraction adds complexity without clear benefit.
+
+---
+
+## The Radical Diagnosis
+
+The codebase is overengineered. Here's the core problem:
+
+**The protocol doesn't trust the Session.**
+
+The Session already has `sess.History(ctx)` which returns all messages including tool calls. But instead of using it, the protocol:
+
+1. Builds elaborate `TransferPacket` structs with `Summary` fields
+2. Each phase creates its own `*Result` struct (InspirationResult, ReframeResult, etc.)
+3. Summaries are always more accessible than data, so downstream code uses summaries
+4. Evidence degrades at every boundary
+
+### The Structs That Should Die
+
+| Struct | Why It's Harmful |
+|--------|------------------|
+| `TransferPacket` | Session.History() replaces it |
+| `InspirationResult` | Just use history |
+| `ReframeResult` | Just use history |
+| `IdeationResult` | Just use history |
+| `StagePlan` | Overengineered; inline in prompts |
+| `readinessContextSummary` | This is where quantitative data dies |
+
+### The Fix
+
+Each phase should:
+
+```go
+// NEW: Just read history directly
+history, _ := sess.History(ctx)
+// Include tool messages in prompt - LLM sees raw JSON
+// No transfer packets, no summaries, no fidelity loss
+```
+
+Instead of:
+
+```go
+// OLD: Build transfer, extract findings, truncate, summarize, lose data
+inspirationResult := extractAndSummarizeEverything(...)
+transfer := buildTransferPacketWithSummary(inspirationResult)
+// Next phase reads transfer.Summary (prose), ignores transfer.Data
+```
+
+### The Validation Test
+
+Before committing to the full rewrite: Create `pkg/protocol/ideo_minimal/` as a single ~800 line file. No transfer packets. Each phase reads `sess.History()`. Compare output quality on the same FlowForge example.
+
+If the minimal version produces better output with 80% less code, the radical simplification is validated.

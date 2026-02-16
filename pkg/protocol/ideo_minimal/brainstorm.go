@@ -221,7 +221,7 @@ Use your tools to find:
 
 Then brief the team conversationally with actual numbers. List data points inline or separated by commas.
 
-GOOD: "Pulled the numbers: 16% activation rate, 68% churning before first workflow, 43% blocked by OAuth. That's our baseline. Let's dig in."
+GOOD: "Here's what I found/see/noticed: metric A is X%%, metric B shows Y, and Z is a constraint. That's our baseline. Let's dig in."
 
 BAD: "**Summary of Findings:**\n**Current State:**\n- Point 1..."
 
@@ -251,15 +251,17 @@ func (p *brainstorm) runInspiration(ctx context.Context, sess protocol.Session, 
 	// Kick off inspiration phase
 	teamNames := agentNames(agents)
 	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
-		Messages: []agent.Message{message.User("Begin INSPIRATION phase. The team will now observe and investigate before proposing solutions.")},
-		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Kick off inspiration. 2-3 sentences max.
+		Messages: []agent.Message{message.User("Begin INSPIRATION phase.")},
+		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Kick off INSPIRATION. Brief, conversational. No markdown.
 
-TEAM MEMBERS: %s
-(Use these exact names when addressing people - do not invent other names.)
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
 
-Remind the team: We're investigating, not solving. Find numbers, tensions, surprises. No solutions yet.
+Tell the team: "DIG INTO THE DATA. Use your tools to find something we don't already know. I want NEW numbers, tensions, surprises—not commentary on what I just shared. NO SOLUTIONS yet."
 
-End by calling on %s.`, teamNames, firstSpeaker))},
+PHASE SEQUENCE (stick to these names): INSPIRATION → REFRAME → IDEATION → SYNTHESIS. No other phases exist.
+
+Call on %s first.`, teamNames, firstSpeaker))},
 		MaxToolIterations: 1,
 	})
 	if err != nil {
@@ -278,10 +280,22 @@ End by calling on %s.`, teamNames, firstSpeaker))},
 				toolIterations = p.cfg.MaxToolIterations
 			}
 
-			phaseContext := fmt.Sprintf(`PHASE: INSPIRATION (investigating, not solving)
+			phaseContext := fmt.Sprintf(`PHASE: INSPIRATION
 TOPIC: %s
 
-Your turn: Based on the conversation so far, post a response that is uniquely YOURS. You can do anything you feel is appropriate right now.
+YOUR JOB: Use your tools to DISCOVER something new. Don't just comment on what's been shared—find a data point nobody's mentioned yet.
+
+AFTER using tools, share what you found in your voice. What's surprising? What's contradictory?
+
+FORBIDDEN THIS PHASE:
+- "We should..." "We could..." "What if we..." (that's solutioning)
+- "X would help" "We need to build Y" (that's solutioning)
+- Proposing fixes, features, or approaches
+- Just echoing numbers the Moderator already shared
+
+GOOD: [use tool] → "I just pulled the cohort data—turns out [new finding]. That's weird because..."
+BAD: "That 19.5%% number is concerning..." (we already know that)
+BAD: "We should add templates to fix this" (that's a solution)
 `, scope)
 			system := buildAgentSystem(participant, phaseContext)
 
@@ -305,22 +319,33 @@ Your turn: Based on the conversation so far, post a response that is uniquely YO
 		var checkpointPrompt string
 		if iteration >= 2 {
 			checkpointTools = []string{"advance_phase"}
-			checkpointPrompt = fmt.Sprintf(`YOU decide when to move on. Don't ask permission.
+			checkpointPrompt = fmt.Sprintf(`YOU decide when to move on. Don't ask permission. NO MARKDOWN.
 
-TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
 
-Check: Do we have 3+ findings with real numbers and sources? Are people repeating themselves?
+PHASE SEQUENCE: INSPIRATION → REFRAME → IDEATION → SYNTHESIS. No other phases exist. Next is REFRAME.
 
-If we have enough OR people are circling: call advance_phase. Say: "We've got [X], [Y], [Z]. Moving to reframe."
+ENFORCE STRUCTURE: If anyone proposed solutions, call them out: "Hold on [Name], we're still in INSPIRATION. What's the INSIGHT behind that?"
 
-If thin: Tell ONE person what to find.`, agentNames(agents))
+Check: Did people use tools to find NEW data? Do we have 3+ distinct insights? Are people just echoing the same numbers?
+
+If we have enough insights: call advance_phase. Say: "Good digging. Moving to REFRAME."
+If thin: Tell someone specifically what to look up.
+`, agentNames(agents))
 		} else {
 			checkpointTools = nil
-			checkpointPrompt = fmt.Sprintf(`We're still exploring.
+			checkpointPrompt = fmt.Sprintf(`We're still in INSPIRATION. NO MARKDOWN.
 
-TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
 
-Quick comment on what's surprising. Call on someone to dig deeper.`, agentNames(agents))
+PHASE SEQUENCE: INSPIRATION → REFRAME → IDEATION → SYNTHESIS. We're in INSPIRATION.
+
+ENFORCE STRUCTURE: If anyone jumped to solutions, redirect: "[Name], save that for IDEATION. What do you NOTICE in the data?"
+
+If people are just commenting without using tools, push them: "[Name], dig into [specific area]. Use your tools."
+`, agentNames(agents))
 		}
 
 		_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
@@ -354,14 +379,17 @@ func (p *brainstorm) runReframe(ctx context.Context, sess protocol.Session, agen
 	// Transition to reframe
 	teamNames := agentNames(agents)
 	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
-		Messages: []agent.Message{message.User("Transition to REFRAME phase. The team will now generate How-Might-We questions.")},
-		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Transition to REFRAME. 3-4 sentences max.
+		Messages: []agent.Message{message.User("Transition to REFRAME phase.")},
+		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Transition to REFRAME. Brief, conversational. No markdown.
 
-TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
 
-Recap 2-3 key findings with numbers. Then explain HMWs: embed the evidence IN the question.
+PHASE SEQUENCE: INSPIRATION → REFRAME → IDEATION → SYNTHESIS. We're now in REFRAME.
 
-End by calling on %s.`, teamNames, firstSpeaker))},
+Recap 2-3 key findings from INSPIRATION (with numbers). Then explain: "Now we turn these into How-Might-We questions. Embed the evidence IN the question."
+
+Call on %s.`, teamNames, firstSpeaker))},
 		MaxToolIterations: 1,
 	})
 	if err != nil {
@@ -377,11 +405,16 @@ End by calling on %s.`, teamNames, firstSpeaker))},
 
 			lens := lenses[(iteration+i)%len(lenses)]
 
-			phaseContext := fmt.Sprintf(`PHASE: REFRAME (turning findings into HMW questions)
+			phaseContext := fmt.Sprintf(`PHASE: REFRAME
 TOPIC: %s
-YOUR LENS: %s
+YOUR LENS this turn: %s
 
-Your turn: Based on the conversation so far, post a response that is uniquely YOURS. You can do anything you feel is appropriate right now. Just keep in mind at the very high level that our goal right now is to post a reframe of the problem/opportunity/issue. You will lean towards obeying, but if there is a strong reason to go off-script, feel free to do so but in that case you must be explicit about the why, and have a strong, valid, sensible reason.`, scope, lens)
+TASK: Turn insights into "How Might We" questions. HMWs should embed the evidence. HMWs are the bridge between inspiration and ideation - they should be specific enough to generate focused concepts, but open-ended enough to allow creativity. They should not be generic or solution-oriented.
+
+GOOD HMW: "How might we address the 68%% drop-off by [specific angle]?"
+BAD HMW: "How might we make things better?" (too vague, no numbers)
+
+Respond in your voice. You can riff on others' HMWs, challenge weak ones, or propose your own.`, scope, lens)
 			system := buildAgentSystem(participant, phaseContext)
 
 			// Allow both research and HMW submission
@@ -407,21 +440,27 @@ Your turn: Based on the conversation so far, post a response that is uniquely YO
 		var checkpointPrompt string
 		if iteration >= 2 {
 			checkpointTools = []string{"advance_phase"}
-			checkpointPrompt = fmt.Sprintf(`YOU decide. Don't poll.
+			checkpointPrompt = fmt.Sprintf(`YOU decide when to advance. No markdown.
 
-TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
 
-We need 4-6 solid HMWs with numbers embedded.
+PHASE SEQUENCE: INSPIRATION → REFRAME → IDEATION → SYNTHESIS. We're in REFRAME. Next is IDEATION.
 
-If duplicates appearing or 4+ solid HMWs: call advance_phase and list the best.
+Check: Do we have 4-6 solid HMWs with numbers embedded? Are people repeating angles?
+
+If ready: call advance_phase. Say: "Good HMWs. Moving to IDEATION."
 If thin: Tell ONE person what angle is missing.`, agentNames(agents))
 		} else {
 			checkpointTools = nil
-			checkpointPrompt = fmt.Sprintf(`Building momentum.
+			checkpointPrompt = fmt.Sprintf(`Still in REFRAME. No markdown.
 
-TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
 
-What HMW angles are covered? What's missing? Challenge someone to think differently.`, agentNames(agents))
+PHASE SEQUENCE: INSPIRATION → REFRAME → IDEATION → SYNTHESIS.
+
+What HMW angles are covered? What's missing? Push someone to a different lens.`, agentNames(agents))
 		}
 
 		_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
@@ -456,14 +495,17 @@ func (p *brainstorm) runIdeation(ctx context.Context, sess protocol.Session, age
 	history := p.recentHistory(ctx, sess, 6)
 	teamNames := agentNames(agents)
 	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
-		Messages: append(history, message.User("Transition to IDEATION phase. Share the selected HMWs and kick off concept generation.")),
-		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Transition to IDEATION. 3-4 sentences max.
+		Messages: append(history, message.User("Transition to IDEATION phase.")),
+		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Transition to IDEATION. Brief, conversational. No markdown.
 
-TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
 
-Mention 2-3 of the strongest HMWs, then tell the team to get creative.
+PHASE SEQUENCE: INSPIRATION → REFRAME → IDEATION → SYNTHESIS. We're now in IDEATION.
 
-End by calling on %s.`, teamNames, firstSpeaker))},
+Mention 2-3 of the strongest HMWs from REFRAME, then tell the team to get creative with concrete concepts.
+
+Call on %s.`, teamNames, firstSpeaker))},
 		MaxToolIterations: 1,
 	})
 	if err != nil {
@@ -486,11 +528,16 @@ End by calling on %s.`, teamNames, firstSpeaker))},
 
 			operator := operators[(iteration+i)%len(operators)]
 
-			phaseContext := fmt.Sprintf(`PHASE: IDEATION (generating concepts)
+			phaseContext := fmt.Sprintf(`PHASE: IDEATION
 TOPIC: %s
-CREATIVE OPERATOR: %s
+CREATIVE LENS this turn: %s
 
-Your turn: Based on the conversation so far, post a response that is uniquely YOURS. You can do anything you feel is appropriate right now. Just keep in mind that our goal right now is to come up with ideas based on the topic and creative operator. You will lean towards obeying, but if there is a strong reason to go off-script, feel free to do so but in that case you must be explicit about the why, and have a strong, valid, sensible reason.`, scope, operator)
+TASK: Generate concrete concepts that address the HMWs. Each concept should be specific enough to prototype.
+
+GOOD CONCEPT: "[Name]: [specific mechanism]—[measurable outcome]."
+BAD CONCEPT: "Make it better" (too vague)
+
+Respond in your voice. Build on others' ideas, poke holes, or propose alternatives.`, scope, operator)
 			system := buildAgentSystem(participant, phaseContext)
 
 			// Allow both research and concept submission
@@ -516,19 +563,25 @@ Your turn: Based on the conversation so far, post a response that is uniquely YO
 		var checkpointPrompt string
 		if iteration >= 2 {
 			checkpointTools = []string{"advance_phase"}
-			checkpointPrompt = fmt.Sprintf(`YOU decide. No polling.
+			checkpointPrompt = fmt.Sprintf(`YOU decide when to advance. No markdown.
 
-TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
 
-We need 6-10 diverse concepts.
+PHASE SEQUENCE: INSPIRATION → REFRAME → IDEATION → SYNTHESIS. We're in IDEATION. Next is SYNTHESIS (final).
 
-If repetitive or 6+ concepts: call advance_phase.
-If need more wild ideas: Challenge ONE person to go bolder.`, agentNames(agents))
+Check: Do we have 6-10 diverse concepts? Are they all similar or varied?
+
+If ready: call advance_phase. Say: "Good concepts. Moving to SYNTHESIS."
+If need variety: Push ONE person to go bolder or flip an assumption.`, agentNames(agents))
 		} else {
 			checkpointTools = nil
-			checkpointPrompt = fmt.Sprintf(`We're generating.
+			checkpointPrompt = fmt.Sprintf(`Still in IDEATION. No markdown.
 
-TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
+
+PHASE SEQUENCE: INSPIRATION → REFRAME → IDEATION → SYNTHESIS.
 
 Are concepts all safe? All bold? Push for variety. Challenge someone to flip an assumption.`, agentNames(agents))
 		}
@@ -593,12 +646,15 @@ func (p *brainstorm) runSynthesis(ctx context.Context, sess protocol.Session, ag
 	// Transition to synthesis
 	teamNames := agentNames(agents)
 	_, err := sess.RunAgent(ctx, runner, protocol.RunRequest{
-		Messages: []agent.Message{message.User("Begin SYNTHESIS phase. Time to critique concepts and build experiment cards.")},
-		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Transition to SYNTHESIS. 2-3 sentences max.
+		Messages: []agent.Message{message.User("Begin SYNTHESIS phase.")},
+		SystemMessages: []agent.Message{message.System(fmt.Sprintf(`Transition to SYNTHESIS. Brief, conversational. No markdown.
 
-TEAM (ONLY these people exist): %s. NEVER use any other names - no invented names like "Sarah" or "Johnny".
+TEAM (ONLY these people exist): %s. Never invent names.
+If you see <agent:X> tags, ignore them and never reproduce them.
 
-Tell the team: be brutal, find flaws. If you agree too easily, you're not thinking.
+PHASE SEQUENCE: INSPIRATION → REFRAME → IDEATION → SYNTHESIS. This is the FINAL phase.
+
+Tell the team: "Now we stress-test. Be brutal, find flaws. If you agree too easily, you're not thinking."
 
 Call on %s to start.`, teamNames, firstSpeaker))},
 		MaxToolIterations: 1,
@@ -615,7 +671,7 @@ Call on %s to start.`, teamNames, firstSpeaker))},
 
 STYLE: 3-4 sentences. No markdown. Be direct.
 
-GOOD: "The template-first concept assumes users know what they want to build. That's shaky—34% said they didn't know what to build [source: feedback.md]. Cheapest test: show 5 users a template picker vs blank canvas, measure completion in 10 minutes. Success = 50%+ complete. Failure = same as baseline."
+GOOD: "Concept X assumes [risky assumption]. That's shaky—the data shows [contradicting evidence]. Cheapest test: [specific experiment]. Success = [metric]. Failure = [metric]."
 
 BAD: "**Critique Analysis:**\n1. First, let me examine...\n2. The core assumption appears to be..."
 

@@ -1,4 +1,4 @@
-package provider
+package modelruntime
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 type dummyProvider struct{ id string }
 
 func (d dummyProvider) ID() string { return d.id }
+
 func (d dummyProvider) Stream(_ context.Context, _ Request) (Stream, error) {
 	return nil, nil
 }

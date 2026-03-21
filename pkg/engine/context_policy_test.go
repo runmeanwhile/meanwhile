@@ -8,6 +8,7 @@ import (
 
 	"github.com/runmeanwhile/meanwhile/pkg/agent"
 	"github.com/runmeanwhile/meanwhile/pkg/contextpolicy"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
@@ -19,7 +20,7 @@ type contextRecordingProvider struct {
 func (p *contextRecordingProvider) ID() string { return "recording" }
 func (p *contextRecordingProvider) Stream(_ context.Context, req provider.Request) (provider.Stream, error) {
 	p.requests = append(p.requests, req)
-	return &contextSingleMessageStream{message: agent.Message{Role: agent.RoleAssistant, Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "ok"}}}}, nil
+	return &contextSingleMessageStream{message: runtimeTextMessage(modelruntime.RoleAssistant, "ok")}, nil
 }
 
 type contextEstimatorProvider struct {
@@ -35,7 +36,7 @@ func (p *contextEstimatorProvider) EstimateMessageTokens(ctx context.Context, mo
 
 type contextSingleMessageStream struct {
 	sent    bool
-	message agent.Message
+	message modelruntime.Message
 }
 
 func (s *contextSingleMessageStream) Recv() (provider.Event, error) {
@@ -86,7 +87,7 @@ func TestRunAgentAppliesRollingWindow(t *testing.T) {
 	if len(req.Messages) != 3 {
 		t.Fatalf("expected system + last 2 messages, got %d", len(req.Messages))
 	}
-	if req.Messages[0].Role != agent.RoleSystem || req.Messages[2].Text() != "m3" {
+	if req.Messages[0].Role != modelruntime.RoleSystem || req.Messages[2].Text() != "m3" {
 		t.Fatalf("unexpected message selection")
 	}
 }
@@ -125,13 +126,13 @@ func TestRunAgentAppliesAgentPerspectiveToNamedAssistantMessages(t *testing.T) {
 	if len(req.Messages) != 3 {
 		t.Fatalf("expected 3 messages, got %d", len(req.Messages))
 	}
-	if req.Messages[1].Role != agent.RoleUser {
+	if req.Messages[1].Role != modelruntime.RoleUser {
 		t.Fatalf("expected peer assistant message to be rewritten as user, got %s", req.Messages[1].Role)
 	}
 	if req.Messages[1].Name != "Bob" {
 		t.Fatalf("expected peer speaker name to be preserved, got %q", req.Messages[1].Name)
 	}
-	if req.Messages[2].Role != agent.RoleAssistant {
+	if req.Messages[2].Role != modelruntime.RoleAssistant {
 		t.Fatalf("expected current agent prior message to remain assistant, got %s", req.Messages[2].Role)
 	}
 }
@@ -168,7 +169,7 @@ func TestRunAgentPreservesNamedAssistantMessagesInLegacyPerspectiveMode(t *testi
 	if len(req.Messages) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(req.Messages))
 	}
-	if req.Messages[0].Role != agent.RoleAssistant {
+	if req.Messages[0].Role != modelruntime.RoleAssistant {
 		t.Fatalf("expected legacy mode to preserve assistant role, got %s", req.Messages[0].Role)
 	}
 }

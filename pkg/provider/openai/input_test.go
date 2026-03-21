@@ -4,19 +4,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 )
 
 func TestBuildInputSupportsImageParts(t *testing.T) {
-	msg := agent.Message{
-		Role: agent.RoleUser,
-		Parts: []agent.ContentPart{
-			{Type: agent.ContentPartText, Text: "Describe this image."},
-			{Type: agent.ContentPartImage, URI: "https://example.com/cat.png"},
+	msg := modelruntime.Message{
+		Role: modelruntime.RoleUser,
+		Parts: []modelruntime.Part{
+			{Type: modelruntime.PartText, Text: "Describe this image."},
+			{Type: modelruntime.PartImage, URI: "https://example.com/cat.png"},
 		},
 	}
 
-	input, err := buildInput([]agent.Message{msg})
+	input, err := buildInput([]modelruntime.Message{msg})
 	if err != nil {
 		t.Fatalf("buildInput: %v", err)
 	}
@@ -41,31 +41,31 @@ func TestBuildInputSupportsImageParts(t *testing.T) {
 }
 
 func TestBuildInputRequiresToolCallID(t *testing.T) {
-	msg := agent.Message{
-		Role:  agent.RoleTool,
-		Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "result"}},
+	msg := modelruntime.Message{
+		Role:  modelruntime.RoleTool,
+		Parts: []modelruntime.Part{{Type: modelruntime.PartText, Text: "result"}},
 	}
 
-	if _, err := buildInput([]agent.Message{msg}); err == nil {
+	if _, err := buildInput([]modelruntime.Message{msg}); err == nil {
 		t.Fatalf("expected error for tool message without call id")
 	}
 }
 
 func TestBuildInputWrapsNamedUserMessage(t *testing.T) {
-	msg := agent.Message{
-		Role:  agent.RoleUser,
+	msg := modelruntime.Message{
+		Role:  modelruntime.RoleUser,
 		Name:  "Marketing",
-		Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "We should focus on week-3 retention."}},
+		Parts: []modelruntime.Part{{Type: modelruntime.PartText, Text: "We should focus on week-3 retention."}},
 	}
 
-	input, err := buildInput([]agent.Message{msg})
+	input, err := buildInput([]modelruntime.Message{msg})
 	if err != nil {
 		t.Fatalf("buildInput: %v", err)
 	}
 	if len(input) != 1 {
 		t.Fatalf("expected 1 input item, got %d", len(input))
 	}
-	if input[0]["role"] != string(agent.RoleUser) {
+	if input[0]["role"] != string(modelruntime.RoleUser) {
 		t.Fatalf("expected user role to be preserved, got %v", input[0]["role"])
 	}
 

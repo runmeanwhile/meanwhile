@@ -16,6 +16,8 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/contextpolicy"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
 	"github.com/runmeanwhile/meanwhile/pkg/hook"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime/compat"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 	"github.com/runmeanwhile/meanwhile/pkg/telemetry"
@@ -170,8 +172,8 @@ func (s *Session) RunAgent(ctx context.Context, a agent.Agent, req protocol.RunR
 
 		message, toolCalls, err := s.runProviderStream(spanCtx, p, provider.Request{
 			Model:    model,
-			Messages: selected,
-			Tools:    toolDefs,
+			Messages: toRuntimeMessages(selected),
+			Tools:    compat.FromToolDefinitions(toolDefs),
 			Params:   params,
 		}, a.Name, span, req.Silent)
 		if err != nil {
@@ -293,15 +295,15 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 			if len(provEvent.Message.Parts) == 0 {
 				text := builder.String()
 				if text != "" {
-					provEvent.Message.Parts = []agent.ContentPart{{Type: agent.ContentPartText, Text: text}}
+					provEvent.Message.Parts = []modelruntime.Part{{Type: modelruntime.PartText, Text: text}}
 				}
 			}
 			if provEvent.Message.Role == "" {
-				provEvent.Message.Role = agent.RoleAssistant
+				provEvent.Message.Role = modelruntime.RoleAssistant
 			}
-			lastMessage = provEvent.Message
+			lastMessage = compat.ToAgentMessage(provEvent.Message)
 			ev := event.New(event.AgentMessageComplete, s.id, map[string]any{
-				"message": provEvent.Message,
+				"message": lastMessage,
 			})
 			ev.AgentID = agentID
 			emit(ev)
@@ -336,6 +338,14 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 	}
 
 	return lastMessage, toolCalls, nil
+}
+
+func toRuntimeMessages(messages []agent.Message) []modelruntime.Message {
+	out := make([]modelruntime.Message, 0, len(messages))
+	for _, message := range messages {
+		out = append(out, compat.FromAgentMessage(message))
+	}
+	return out
 }
 
 func (s *Session) resolveTools(toolIDs []string, policy tool.Policy) ([]tool.Definition, map[string]struct{}, error) {

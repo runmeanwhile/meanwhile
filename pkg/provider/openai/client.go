@@ -3,6 +3,7 @@ package openai
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -253,19 +254,20 @@ func buildContentParts(parts []modelruntime.Part, role modelruntime.Role) []map[
 				"text": part.Text,
 			})
 		case "image", "input_image":
-			if part.URI == "" {
+			imageURL := imageURLFromPart(part)
+			if imageURL == "" {
 				continue
 			}
 			if role == modelruntime.RoleAssistant {
 				out = append(out, map[string]any{
 					"type": textType,
-					"text": fmt.Sprintf("[image:%s]", part.URI),
+					"text": fmt.Sprintf("[image:%s]", imageURL),
 				})
 				continue
 			}
 			entry := map[string]any{
 				"type":      "input_image",
-				"image_url": part.URI,
+				"image_url": imageURL,
 			}
 			if part.Detail != "" {
 				entry["detail"] = part.Detail
@@ -298,6 +300,20 @@ func buildContentParts(parts []modelruntime.Part, role modelruntime.Role) []map[
 		}
 	}
 	return out
+}
+
+func imageURLFromPart(part modelruntime.Part) string {
+	if part.URI != "" {
+		return part.URI
+	}
+	if len(part.Data) == 0 {
+		return ""
+	}
+	mimeType := strings.TrimSpace(part.MIMEType)
+	if mimeType == "" {
+		mimeType = "image/png"
+	}
+	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(part.Data)
 }
 
 func buildToolOutputItems(msg modelruntime.Message) ([]map[string]any, error) {
@@ -349,8 +365,8 @@ func buildToolOutputItems(msg modelruntime.Message) ([]map[string]any, error) {
 		parts = append(parts, modelruntime.Part{Type: modelruntime.PartText, Text: "Tool output:"})
 		parts = append(parts, nonTextParts...)
 		items = append(items, map[string]any{
-			"role":    string(modelruntime.RoleAssistant),
-			"content": buildContentParts(parts, modelruntime.RoleAssistant),
+			"role":    string(modelruntime.RoleUser),
+			"content": buildContentParts(parts, modelruntime.RoleUser),
 		})
 	}
 

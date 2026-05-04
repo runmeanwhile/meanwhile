@@ -86,6 +86,50 @@ func TestRunAgentToolLoopExecutesTools(t *testing.T) {
 	}
 }
 
+func TestRunAgentDetailedReturnsTraceEvents(t *testing.T) {
+	prov := &scriptedProvider{}
+	eng, err := New(WithProvider(prov))
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	toolRun := &echoTool{}
+	eng.ToolRegistry().Register(toolRun)
+
+	participant := agent.Agent{Name: "agent", Model: "test", Tools: []string{"echo"}}
+	result, err := eng.RunAgentDetailedWithContext(context.Background(), participant, agent.Message{
+		Role:  agent.RoleUser,
+		Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "do"}},
+	})
+	if err != nil {
+		t.Fatalf("run detailed agent: %v", err)
+	}
+	if result.Final != "done" {
+		t.Fatalf("final = %q", result.Final)
+	}
+
+	var sawToolStart, sawToolComplete, sawFinal bool
+	for _, ev := range result.Events {
+		switch ev.Type {
+		case event.ToolCallStarted:
+			if ev.AgentID == "agent" && ev.ToolID == "echo" {
+				sawToolStart = true
+			}
+		case event.ToolCallCompleted:
+			if ev.AgentID == "agent" && ev.ToolID == "echo" {
+				sawToolComplete = true
+			}
+		case event.AgentMessageComplete:
+			if ev.AgentID == "agent" && event.Summary(ev) == `message="done"` {
+				sawFinal = true
+			}
+		}
+	}
+	if !sawToolStart || !sawToolComplete || !sawFinal {
+		t.Fatalf("missing trace events: start=%v complete=%v final=%v events=%#v", sawToolStart, sawToolComplete, sawFinal, result.Events)
+	}
+}
+
 func TestRunAgentToolIterationsExceeded(t *testing.T) {
 	prov := &scriptedProvider{alwaysToolCall: true}
 	eng, err := New(WithProvider(prov))

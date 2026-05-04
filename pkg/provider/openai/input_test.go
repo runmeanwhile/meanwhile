@@ -40,6 +40,49 @@ func TestBuildInputSupportsImageParts(t *testing.T) {
 	}
 }
 
+func TestBuildInputPassesToolImageOutputAsUserImage(t *testing.T) {
+	msg := modelruntime.Message{
+		Role:       modelruntime.RoleTool,
+		Name:       "inspect_image",
+		ToolCallID: "call-123",
+		Parts: []modelruntime.Part{
+			{Type: modelruntime.PartText, Text: "Original photo attached."},
+			{Type: modelruntime.PartImage, URI: "data:image/jpeg;base64,abc123", Detail: "low"},
+		},
+		Metadata: map[string]any{
+			"arguments": `{"question":"what is visible?"}`,
+		},
+	}
+
+	input, err := buildInput([]modelruntime.Message{msg})
+	if err != nil {
+		t.Fatalf("buildInput: %v", err)
+	}
+	if len(input) != 3 {
+		t.Fatalf("expected function call, output, and image attachment input; got %d", len(input))
+	}
+
+	if input[0]["type"] != "function_call" || input[0]["name"] != "inspect_image" {
+		t.Fatalf("unexpected function call item: %#v", input[0])
+	}
+	if input[1]["type"] != "function_call_output" || input[1]["output"] != "Original photo attached." {
+		t.Fatalf("unexpected function output item: %#v", input[1])
+	}
+	if input[2]["role"] != string(modelruntime.RoleUser) {
+		t.Fatalf("expected tool image attachment to be reintroduced as user content, got %#v", input[2])
+	}
+	content, ok := input[2]["content"].([]map[string]any)
+	if !ok {
+		t.Fatalf("expected content parts, got %T", input[2]["content"])
+	}
+	if len(content) != 2 {
+		t.Fatalf("expected text and image attachment parts, got %d", len(content))
+	}
+	if content[1]["type"] != "input_image" || content[1]["image_url"] != "data:image/jpeg;base64,abc123" || content[1]["detail"] != "low" {
+		t.Fatalf("unexpected tool image part: %#v", content[1])
+	}
+}
+
 func TestBuildInputRequiresToolCallID(t *testing.T) {
 	msg := modelruntime.Message{
 		Role:  modelruntime.RoleTool,

@@ -29,7 +29,21 @@ Use the `PublicKey` and `SecretKey` from your Langfuse project.
 
 - `session.run` trace per session run.
 - `agent.run` span per agent execution.
-- Tool call events attach span attributes.
+- `tool.run` child span per tool execution.
+- Agent spans include OpenTelemetry events for:
+  - `agent.message.delta`
+  - `agent.reasoning.delta`
+  - `agent.reasoning.summary.delta`
+  - `agent.message.completed`
+  - `tool.call`
+  - `provider.raw.event`
+- Tool spans include OpenTelemetry events for:
+  - `tool.call.started`
+  - `tool.call.completed`
+  - `tool.call.error`
+  - `tool.call.awaiting`
+
+All telemetry events carry stable attributes such as `session_id`, `agent_id`, `tool_id`, `tool_call_id`, `event_type`, and relevant text/result fields. Image bytes and image data URLs are omitted from telemetry attributes; the trace records the image event and points back to the original application artifact instead of duplicating media.
 
 ## Recommended attributes for persona evaluation
 

@@ -269,18 +269,21 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 			})
 			ev.AgentID = agentID
 			emit(ev)
+			span.AddEvent(string(event.AgentMessageDelta), llmEventAttrs(s.id, agentID, event.AgentMessageDelta, provEvent.Delta))
 		case provider.EventReasoningDelta:
 			ev := event.New(event.AgentReasoningDelta, s.id, map[string]any{
 				"delta": provEvent.Delta,
 			})
 			ev.AgentID = agentID
 			emit(ev)
+			span.AddEvent(string(event.AgentReasoningDelta), llmEventAttrs(s.id, agentID, event.AgentReasoningDelta, provEvent.Delta))
 		case provider.EventReasoningSummaryDelta:
 			ev := event.New(event.AgentReasoningSummaryDelta, s.id, map[string]any{
 				"delta": provEvent.Delta,
 			})
 			ev.AgentID = agentID
 			emit(ev)
+			span.AddEvent(string(event.AgentReasoningSummaryDelta), llmEventAttrs(s.id, agentID, event.AgentReasoningSummaryDelta, provEvent.Delta))
 		case provider.EventMessageCompleted:
 			if len(provEvent.Message.Parts) == 0 {
 				text := builder.String()
@@ -297,10 +300,9 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 			})
 			ev.AgentID = agentID
 			emit(ev)
+			span.AddEvent(string(event.AgentMessageComplete), messageCompleteAttrs(s.id, agentID, lastMessage))
 		case provider.EventToolCall:
-			span.AddEvent("tool.call", map[string]any{
-				"tool_calls": len(provEvent.ToolCalls),
-			})
+			span.AddEvent(string(provider.EventToolCall), providerToolCallAttrs(s.id, agentID, provEvent.ToolCalls))
 			toolCalls = append(toolCalls, provEvent.ToolCalls...)
 		case provider.EventToolResult:
 			return agent.Message{}, nil, fmt.Errorf("provider tool results are not supported")
@@ -311,6 +313,7 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 				})
 				ev.AgentID = agentID
 				emit(ev)
+				span.AddEvent(string(event.ProviderRawEvent), rawProviderEventAttrs(s.id, agentID, provEvent.Raw))
 			}
 		case provider.EventError:
 			if provEvent.Err != nil {

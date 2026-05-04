@@ -14,6 +14,7 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/telemetry"
 	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
@@ -83,6 +84,81 @@ func TestRunAgentToolLoopExecutesTools(t *testing.T) {
 	}
 	if toolRun.count == 0 {
 		t.Fatal("expected tool to run")
+	}
+}
+
+func TestRunAgentDetailedReturnsTraceEvents(t *testing.T) {
+	prov := &scriptedProvider{}
+	eng, err := New(WithProvider(prov))
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+
+	toolRun := &echoTool{}
+	eng.ToolRegistry().Register(toolRun)
+
+	participant := agent.Agent{Name: "agent", Model: "test", Tools: []string{"echo"}}
+	result, err := eng.RunAgentDetailedWithContext(context.Background(), participant, agent.Message{
+		Role:  agent.RoleUser,
+		Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "do"}},
+	})
+	if err != nil {
+		t.Fatalf("run detailed agent: %v", err)
+	}
+	if result.Final != "done" {
+		t.Fatalf("final = %q", result.Final)
+	}
+
+	var sawToolStart, sawToolComplete, sawFinal bool
+	for _, ev := range result.Events {
+		switch ev.Type {
+		case event.ToolCallStarted:
+			if ev.AgentID == "agent" && ev.ToolID == "echo" {
+				sawToolStart = true
+			}
+		case event.ToolCallCompleted:
+			if ev.AgentID == "agent" && ev.ToolID == "echo" {
+				sawToolComplete = true
+			}
+		case event.AgentMessageComplete:
+			if ev.AgentID == "agent" && event.Summary(ev) == `message="done"` {
+				sawFinal = true
+			}
+		}
+	}
+	if !sawToolStart || !sawToolComplete || !sawFinal {
+		t.Fatalf("missing trace events: start=%v complete=%v final=%v events=%#v", sawToolStart, sawToolComplete, sawFinal, result.Events)
+	}
+}
+
+func TestRunAgentEmitsOpenTelemetryEvents(t *testing.T) {
+	prov := &scriptedProvider{}
+	tel := &recordingTelemetry{}
+	eng, err := New(WithProvider(prov), WithTelemetryClient(tel))
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	eng.ToolRegistry().Register(&echoTool{})
+
+	participant := agent.Agent{Name: "agent", Model: "test", Tools: []string{"echo"}}
+	if _, err := eng.RunAgentDetailedWithContext(context.Background(), participant, agent.Message{
+		Role:  agent.RoleUser,
+		Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "do"}},
+	}); err != nil {
+		t.Fatalf("run detailed agent: %v", err)
+	}
+
+	if !tel.hasEvent(string(provider.EventToolCall), "agent_id", "agent") {
+		t.Fatalf("missing provider tool-call telemetry event: %#v", tel.events)
+	}
+	if !tel.hasEvent(string(event.ToolCallStarted), "tool_id", "echo") {
+		t.Fatalf("missing tool start telemetry event: %#v", tel.events)
+	}
+	if !tel.hasEvent(string(event.ToolCallCompleted), "tool_id", "echo") {
+		t.Fatalf("missing tool completed telemetry event: %#v", tel.events)
+	}
+	if !tel.hasEvent(string(event.AgentMessageComplete), "text", "done") {
+		t.Fatalf("missing final output telemetry event: %#v", tel.events)
 	}
 }
 
@@ -173,6 +249,58 @@ type scriptedProvider struct {
 	requests       []provider.Request
 	alwaysToolCall bool
 }
+
+type recordingTelemetry struct {
+	mu     sync.Mutex
+	events []recordedSpanEvent
+}
+
+type recordedSpanEvent struct {
+	name  string
+	attrs map[string]any
+}
+
+func (r *recordingTelemetry) StartTrace(ctx context.Context, _ telemetry.SpanInput) (telemetry.Span, context.Context) {
+	return &recordingSpan{telemetry: r}, ctx
+}
+
+func (r *recordingTelemetry) StartSpan(ctx context.Context, _ telemetry.SpanInput) (telemetry.Span, context.Context) {
+	return &recordingSpan{telemetry: r}, ctx
+}
+
+func (r *recordingTelemetry) Close(context.Context) error { return nil }
+
+func (r *recordingTelemetry) hasEvent(name string, attrKey string, attrValue any) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, ev := range r.events {
+		if ev.name != name {
+			continue
+		}
+		if ev.attrs[attrKey] == attrValue {
+			return true
+		}
+	}
+	return false
+}
+
+type recordingSpan struct {
+	telemetry *recordingTelemetry
+}
+
+func (s *recordingSpan) End(error) {}
+
+func (s *recordingSpan) AddEvent(name string, attrs map[string]any) {
+	copied := make(map[string]any, len(attrs))
+	for key, value := range attrs {
+		copied[key] = value
+	}
+	s.telemetry.mu.Lock()
+	s.telemetry.events = append(s.telemetry.events, recordedSpanEvent{name: name, attrs: copied})
+	s.telemetry.mu.Unlock()
+}
+
+func (s *recordingSpan) SetAttribute(string, any) {}
 
 func (s *scriptedProvider) ID() string { return "scripted" }
 

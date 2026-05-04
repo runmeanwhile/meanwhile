@@ -104,7 +104,7 @@ func buildPayload(req provider.Request) map[string]any {
 		"messages": buildMessages(req.Messages),
 		"stream":   true,
 	}
-	if len(req.Tools) > 0 {
+	if len(req.Tools) > 0 && !hasToolResult(req.Messages) {
 		payload["tools"] = buildTools(req.Tools)
 		payload["tool_choice"] = "auto"
 	}
@@ -119,6 +119,15 @@ func buildPayload(req provider.Request) map[string]any {
 		}
 	}
 	return payload
+}
+
+func hasToolResult(messages []modelruntime.Message) bool {
+	for _, msg := range messages {
+		if msg.Role == modelruntime.RoleTool {
+			return true
+		}
+	}
+	return false
 }
 
 func buildMessages(messages []modelruntime.Message) []map[string]any {

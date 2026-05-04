@@ -29,7 +29,7 @@ func (p *recordingProvider) Stream(_ context.Context, req provider.Request) (pro
 
 	return &qualityStream{events: []provider.Event{{
 		Type:    provider.EventMessageCompleted,
-		Message: message.Assistant("ok"),
+		Message: runtimeFromAgentMessage(message.Assistant("ok")),
 	}}}, nil
 }
 

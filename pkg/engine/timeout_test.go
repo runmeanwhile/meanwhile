@@ -27,7 +27,7 @@ func (p *timeoutProvider) Stream(ctx context.Context, req provider.Request) (pro
 	if call == 1 {
 		return &blockingStream{ctx: ctx}, nil
 	}
-	return &contextSingleMessageStream{message: message.Assistant("ok")}, nil
+	return &contextSingleMessageStream{message: runtimeFromAgentMessage(message.Assistant("ok"))}, nil
 }
 
 type blockingStream struct {

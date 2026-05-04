@@ -2,65 +2,53 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
 // EventType describes a provider event.
-type EventType string
+type EventType = modelruntime.EventType
 
 // Provider event types emitted by streaming providers.
 const (
-	EventMessageDelta          EventType = "message.delta"
-	EventMessageCompleted      EventType = "message.completed"
-	EventReasoningDelta        EventType = "reasoning.delta"
-	EventReasoningSummaryDelta EventType = "reasoning.summary.delta"
-	EventToolCall              EventType = "tool.call"
-	EventToolResult            EventType = "tool.result"
-	EventError                 EventType = "error"
-	EventRaw                   EventType = "raw"
+	EventMessageDelta          = modelruntime.EventMessageDelta
+	EventMessageCompleted      = modelruntime.EventMessageCompleted
+	EventReasoningDelta        = modelruntime.EventReasoningDelta
+	EventReasoningSummaryDelta = modelruntime.EventReasoningSummaryDelta
+	EventToolCall              = modelruntime.EventToolCall
+	EventToolResult            = modelruntime.EventToolResult
+	EventError                 = modelruntime.EventError
+	EventRaw                   = modelruntime.EventRaw
 )
 
 // ToolCall represents a tool call emitted by the provider.
-type ToolCall struct {
-	ID        string
-	ToolID    string
-	Arguments json.RawMessage
-}
+type ToolCall = modelruntime.ToolCall
 
 // Event is emitted by provider streams.
-type Event struct {
-	Type      EventType
-	Message   agent.Message
-	Delta     string
-	ToolCalls []ToolCall
-	Raw       json.RawMessage
-	Err       error
-}
+type Event = modelruntime.Event
 
 // Request describes an LLM request.
-type Request struct {
-	Model    string
-	Messages []agent.Message
-	Tools    []tool.Definition
-	Params   map[string]any
-}
+type Request = modelruntime.Request
 
 // Stream receives provider events.
-type Stream interface {
-	Recv() (Event, error)
-	Close() error
-}
+type Stream = modelruntime.Stream
 
 // Provider starts streams for a given request.
-type Provider interface {
-	ID() string
-	Stream(ctx context.Context, req Request) (Stream, error)
-}
+type Provider = modelruntime.Provider
 
 // TokenEstimator optionally provides provider-specific token estimates.
 type TokenEstimator interface {
 	EstimateMessageTokens(ctx context.Context, model string, msg agent.Message) (int, error)
+}
+
+// ToolDefinitionFromTool converts a Meanwhile tool definition into the neutral runtime shape.
+func ToolDefinitionFromTool(def tool.Definition) modelruntime.ToolDefinition {
+	return modelruntime.ToolDefinition{
+		ID:          def.ID,
+		Description: def.Description,
+		JSONSchema:  append([]byte(nil), def.Schema.JSONSchema...),
+		Tags:        append([]string(nil), def.Tags...),
+	}
 }

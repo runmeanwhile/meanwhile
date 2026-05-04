@@ -10,6 +10,7 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/event"
 	"github.com/runmeanwhile/meanwhile/pkg/hook"
 	"github.com/runmeanwhile/meanwhile/pkg/memory"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 	"github.com/runmeanwhile/meanwhile/pkg/telemetry"
@@ -35,9 +36,9 @@ func (m *mockStream) Recv() (provider.Event, error) {
 	m.called = true
 	return provider.Event{
 		Type: provider.EventMessageCompleted,
-		Message: agent.Message{
-			Role:  agent.RoleAssistant,
-			Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "Mock response"}},
+		Message: modelruntime.Message{
+			Role:  modelruntime.RoleAssistant,
+			Parts: []modelruntime.Part{{Type: modelruntime.PartText, Text: "Mock response"}},
 		},
 	}, nil
 }

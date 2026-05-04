@@ -11,9 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
-	"github.com/runmeanwhile/meanwhile/pkg/tool"
 	tiktoken "github.com/weaviate/tiktoken-go"
 )
 
@@ -165,10 +164,10 @@ func normalizeResponseFormat(value any) map[string]any {
 	return nil
 }
 
-func buildInput(messages []agent.Message) ([]map[string]any, error) {
+func buildInput(messages []modelruntime.Message) ([]map[string]any, error) {
 	inputs := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
-		if msg.Role == agent.RoleTool {
+		if msg.Role == modelruntime.RoleTool {
 			toolInputs, err := buildToolOutputItems(msg)
 			if err != nil {
 				return nil, err
@@ -191,8 +190,8 @@ func buildInput(messages []agent.Message) ([]map[string]any, error) {
 	return inputs, nil
 }
 
-func wrapNamedMessage(msg agent.Message) agent.Message {
-	if msg.Name == "" || msg.Role == agent.RoleTool {
+func wrapNamedMessage(msg modelruntime.Message) modelruntime.Message {
+	if msg.Name == "" || msg.Role == modelruntime.RoleTool {
 		return msg
 	}
 
@@ -204,25 +203,25 @@ func wrapNamedMessage(msg agent.Message) agent.Message {
 		if strings.TrimSpace(text) == "" {
 			return msg
 		}
-		msg.Parts = []agent.ContentPart{{
-			Type: agent.ContentPartText,
+		msg.Parts = []modelruntime.Part{{
+			Type: modelruntime.PartText,
 			Text: openTag + text + closeTag,
 		}}
 		msg.Name = ""
 		return msg
 	}
 
-	parts := make([]agent.ContentPart, 0, len(msg.Parts)+2)
-	parts = append(parts, agent.ContentPart{Type: agent.ContentPartText, Text: openTag})
+	parts := make([]modelruntime.Part, 0, len(msg.Parts)+2)
+	parts = append(parts, modelruntime.Part{Type: modelruntime.PartText, Text: openTag})
 	parts = append(parts, msg.Parts...)
-	parts = append(parts, agent.ContentPart{Type: agent.ContentPartText, Text: closeTag})
+	parts = append(parts, modelruntime.Part{Type: modelruntime.PartText, Text: closeTag})
 
 	msg.Parts = parts
 	msg.Name = ""
 	return msg
 }
 
-func buildMessageContent(msg agent.Message) any {
+func buildMessageContent(msg modelruntime.Message) any {
 	parts := buildContentParts(msg.Parts, msg.Role)
 	if len(parts) > 0 {
 		return parts
@@ -231,16 +230,16 @@ func buildMessageContent(msg agent.Message) any {
 	if text == "" {
 		return ""
 	}
-	if msg.Role == agent.RoleAssistant {
+	if msg.Role == modelruntime.RoleAssistant {
 		return []map[string]any{{"type": "output_text", "text": text}}
 	}
 	return []map[string]any{{"type": "input_text", "text": text}}
 }
 
-func buildContentParts(parts []agent.ContentPart, role agent.Role) []map[string]any {
+func buildContentParts(parts []modelruntime.Part, role modelruntime.Role) []map[string]any {
 	out := make([]map[string]any, 0, len(parts))
 	textType := "input_text"
-	if role == agent.RoleAssistant {
+	if role == modelruntime.RoleAssistant {
 		textType = "output_text"
 	}
 	for _, part := range parts {
@@ -257,7 +256,7 @@ func buildContentParts(parts []agent.ContentPart, role agent.Role) []map[string]
 			if part.URI == "" {
 				continue
 			}
-			if role == agent.RoleAssistant {
+			if role == modelruntime.RoleAssistant {
 				out = append(out, map[string]any{
 					"type": textType,
 					"text": fmt.Sprintf("[image:%s]", part.URI),
@@ -290,7 +289,7 @@ func buildContentParts(parts []agent.ContentPart, role agent.Role) []map[string]
 					"type": textType,
 					"text": part.Text,
 				})
-			} else if role == agent.RoleAssistant && part.URI != "" {
+			} else if role == modelruntime.RoleAssistant && part.URI != "" {
 				out = append(out, map[string]any{
 					"type": textType,
 					"text": fmt.Sprintf("[%s:%s]", part.Type, part.URI),
@@ -301,7 +300,7 @@ func buildContentParts(parts []agent.ContentPart, role agent.Role) []map[string]
 	return out
 }
 
-func buildToolOutputItems(msg agent.Message) ([]map[string]any, error) {
+func buildToolOutputItems(msg modelruntime.Message) ([]map[string]any, error) {
 	if msg.ToolCallID == "" {
 		return nil, fmt.Errorf("tool message missing call id")
 	}
@@ -346,19 +345,19 @@ func buildToolOutputItems(msg agent.Message) ([]map[string]any, error) {
 
 	nonTextParts := filterNonTextParts(msg.Parts)
 	if len(nonTextParts) > 0 {
-		parts := make([]agent.ContentPart, 0, len(nonTextParts)+1)
-		parts = append(parts, agent.ContentPart{Type: agent.ContentPartText, Text: "Tool output:"})
+		parts := make([]modelruntime.Part, 0, len(nonTextParts)+1)
+		parts = append(parts, modelruntime.Part{Type: modelruntime.PartText, Text: "Tool output:"})
 		parts = append(parts, nonTextParts...)
 		items = append(items, map[string]any{
-			"role":    string(agent.RoleAssistant),
-			"content": buildContentParts(parts, agent.RoleAssistant),
+			"role":    string(modelruntime.RoleAssistant),
+			"content": buildContentParts(parts, modelruntime.RoleAssistant),
 		})
 	}
 
 	return items, nil
 }
 
-func toolNameFromMessage(msg agent.Message) string {
+func toolNameFromMessage(msg modelruntime.Message) string {
 	if msg.Name != "" {
 		return msg.Name
 	}
@@ -370,24 +369,24 @@ func toolNameFromMessage(msg agent.Message) string {
 	return "tool"
 }
 
-func filterNonTextParts(parts []agent.ContentPart) []agent.ContentPart {
-	out := make([]agent.ContentPart, 0, len(parts))
+func filterNonTextParts(parts []modelruntime.Part) []modelruntime.Part {
+	out := make([]modelruntime.Part, 0, len(parts))
 	for _, part := range parts {
-		if part.Type == agent.ContentPartText {
+		if part.Type == modelruntime.PartText {
 			continue
 		}
 		out = append(out, part)
 	}
 	return out
 }
-func buildTools(defs []tool.Definition) []map[string]any {
+func buildTools(defs []modelruntime.ToolDefinition) []map[string]any {
 	tools := make([]map[string]any, 0, len(defs))
 	for _, def := range defs {
 		var schema json.RawMessage
-		if len(def.Schema.JSONSchema) == 0 {
+		if len(def.JSONSchema) == 0 {
 			schema = json.RawMessage(`{"type":"object","properties":{}}`)
 		} else {
-			schema = json.RawMessage(def.Schema.JSONSchema)
+			schema = json.RawMessage(def.JSONSchema)
 		}
 		tools = append(tools, map[string]any{
 			"type":       "function",

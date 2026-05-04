@@ -11,6 +11,7 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/agent"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
 	"github.com/runmeanwhile/meanwhile/pkg/hook"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 	"github.com/runmeanwhile/meanwhile/pkg/tool"
@@ -74,7 +75,7 @@ func TestRunAgentToolLoopExecutesTools(t *testing.T) {
 		t.Fatalf("expected tool message in second call")
 	}
 	last := prov.requests[1].Messages[len(prov.requests[1].Messages)-1]
-	if last.Role != agent.RoleTool {
+	if last.Role != modelruntime.RoleTool {
 		t.Fatalf("expected last message to be tool, got %s", last.Role)
 	}
 	if last.Text() != "hello!" {
@@ -196,7 +197,7 @@ func (s *scriptedProvider) Stream(_ context.Context, req provider.Request) (prov
 
 	return &scriptedStream{events: []provider.Event{{
 		Type:    provider.EventMessageCompleted,
-		Message: agent.Message{Role: agent.RoleAssistant, Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "done"}}},
+		Message: runtimeTextMessage(modelruntime.RoleAssistant, "done"),
 	}}}, nil
 }
 

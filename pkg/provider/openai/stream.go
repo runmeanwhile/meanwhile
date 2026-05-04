@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-)
 
-import (
-	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
 
@@ -193,9 +191,9 @@ func (s *stream) decodeEvent(data []byte) (provider.Event, error) {
 		}
 		return provider.Event{
 			Type: provider.EventMessageCompleted,
-			Message: agent.Message{
-				Role:  agent.RoleAssistant,
-				Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: payload.Text}},
+			Message: modelruntime.Message{
+				Role:  modelruntime.RoleAssistant,
+				Parts: []modelruntime.Part{{Type: modelruntime.PartText, Text: payload.Text}},
 			},
 		}, nil
 	case "response.function_call_arguments.done":

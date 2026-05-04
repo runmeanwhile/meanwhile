@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 )
 
 type timeoutErr struct{}
@@ -41,7 +41,7 @@ func TestResilientStream_ReplaysTransientErrors(t *testing.T) {
 	ev2 := Event{Type: EventMessageDelta, Delta: "world"}
 	ev3 := Event{
 		Type:    EventMessageCompleted,
-		Message: agent.Message{Role: agent.RoleAssistant, Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "hello world"}}},
+		Message: modelruntime.Message{Role: modelruntime.RoleAssistant, Parts: []modelruntime.Part{{Type: modelruntime.PartText, Text: "hello world"}}},
 	}
 
 	streams := []Stream{

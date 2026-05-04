@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
 func TestBuildRequestPayloadUsesObjectSchema(t *testing.T) {
 	payload, err := buildRequestPayload(provider.Request{
 		Model: "gpt-test",
-		Tools: []modelruntime.ToolDefinition{{ID: "do_thing"}},
+		Tools: []tool.Definition{{ID: "do_thing"}},
 	})
 	if err != nil {
 		t.Fatalf("buildRequestPayload: %v", err)
@@ -41,11 +42,11 @@ func TestBuildRequestPayloadUsesObjectSchema(t *testing.T) {
 
 func TestBuildToolOutputItemsUsesArgumentsFromMetadata(t *testing.T) {
 	args := json.RawMessage(`{"x":1}`)
-	msg := modelruntime.Message{
-		Role:       modelruntime.RoleTool,
+	msg := agent.Message{
+		Role:       agent.RoleTool,
 		Name:       "calc",
 		ToolCallID: "call-1",
-		Parts:      []modelruntime.Part{{Type: modelruntime.PartText, Text: "done"}},
+		Parts:      []agent.ContentPart{{Type: agent.ContentPartText, Text: "done"}},
 		Metadata:   map[string]any{"arguments": args},
 	}
 

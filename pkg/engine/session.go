@@ -442,7 +442,6 @@ func (s *Session) Respond(ctx context.Context, requestID string, msg agent.Messa
 	if rp, ok := s.protocol.(protocol.ResultProvider); ok {
 		if meta := rp.Result(); len(meta) > 0 {
 			result.Metadata = cloneMetadata(meta)
-			applyProtocolSummary(result)
 			return result, nil
 		}
 	}
@@ -454,7 +453,6 @@ func (s *Session) Respond(ctx context.Context, requestID string, msg agent.Messa
 			result.Metadata["protocol_action"] = action
 		}
 	}
-	applyProtocolSummary(result)
 
 	return result, nil
 }

@@ -447,24 +447,6 @@ func (e *Engine) RunAgent(a agent.Agent, messages ...agent.Message) (agent.Messa
 
 // RunAgentWithContext runs an agent using the provided context.
 func (e *Engine) RunAgentWithContext(ctx context.Context, a agent.Agent, messages ...agent.Message) (agent.Message, error) {
-	result, err := e.RunAgentDetailedWithContext(ctx, a, messages...)
-	if err != nil {
-		return agent.Message{}, err
-	}
-
-	// Return final assistant message
-	return message.Assistant(result.Final), nil
-}
-
-// RunAgentDetailed creates an ephemeral solo session, runs the agent, and returns
-// the full run result including events, transcript, and protocol metadata.
-func (e *Engine) RunAgentDetailed(a agent.Agent, messages ...agent.Message) (*RunResult, error) {
-	return e.RunAgentDetailedWithContext(context.Background(), a, messages...)
-}
-
-// RunAgentDetailedWithContext runs an agent using the provided context and
-// returns the full run result including reasoning, tool, and final-output events.
-func (e *Engine) RunAgentDetailedWithContext(ctx context.Context, a agent.Agent, messages ...agent.Message) (*RunResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -476,7 +458,7 @@ func (e *Engine) RunAgentDetailedWithContext(ctx context.Context, a agent.Agent,
 		Protocol:     protocol.Solo(),
 	})
 	if err != nil {
-		return nil, err
+		return agent.Message{}, err
 	}
 	defer func() {
 		_ = e.CloseSession(context.Background(), sess.ID())
@@ -484,15 +466,16 @@ func (e *Engine) RunAgentDetailedWithContext(ctx context.Context, a agent.Agent,
 
 	// Run the first message (typically a user message)
 	if len(messages) == 0 {
-		return nil, fmt.Errorf("at least one message required")
+		return agent.Message{}, fmt.Errorf("at least one message required")
 	}
 
 	result, err := e.Run(ctx, sess.ID(), messages[0])
 	if err != nil {
-		return nil, err
+		return agent.Message{}, err
 	}
 
-	return result, nil
+	// Return final assistant message
+	return message.Assistant(result.Final), nil
 }
 
 // resolveProvider finds the provider for a given model.
@@ -757,7 +740,6 @@ func (e *Engine) Run(ctx context.Context, sessionID string, msg agent.Message) (
 	if rp, ok := sess.protocol.(protocol.ResultProvider); ok {
 		if meta := rp.Result(); len(meta) > 0 {
 			result.Metadata = cloneMetadata(meta)
-			applyProtocolSummary(result)
 			return result, nil
 		}
 	}
@@ -769,7 +751,6 @@ func (e *Engine) Run(ctx context.Context, sessionID string, msg agent.Message) (
 			result.Metadata["protocol_action"] = action
 		}
 	}
-	applyProtocolSummary(result)
 
 	return result, nil
 }

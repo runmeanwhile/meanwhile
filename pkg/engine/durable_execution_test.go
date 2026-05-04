@@ -14,7 +14,6 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/contextpolicy"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
 	"github.com/runmeanwhile/meanwhile/pkg/message"
-	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
@@ -108,7 +107,7 @@ func (p *blipProvider) Stream(ctx context.Context, req provider.Request) (provid
 	fail := call <= p.failStreams
 	events := []provider.Event{
 		{Type: provider.EventMessageDelta, Delta: "ok"},
-		{Type: provider.EventMessageCompleted, Message: runtimeFromAgentMessage(message.Assistant("ok"))},
+		{Type: provider.EventMessageCompleted, Message: message.Assistant("ok")},
 	}
 	return &blipStream{events: events, fail: fail, failAfter: 1}, nil
 }
@@ -251,7 +250,7 @@ func registerDurableProtocolFactory(eng *Engine) {
 	})
 }
 
-func hasSummaryMessage(messages []modelruntime.Message) bool {
+func hasSummaryMessage(messages []agent.Message) bool {
 	for _, msg := range messages {
 		if msg.Metadata == nil {
 			continue

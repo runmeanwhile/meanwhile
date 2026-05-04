@@ -3,7 +3,6 @@ package openai
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,8 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
+	"github.com/runmeanwhile/meanwhile/pkg/agent"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/tool"
 	tiktoken "github.com/weaviate/tiktoken-go"
 )
 
@@ -165,10 +165,10 @@ func normalizeResponseFormat(value any) map[string]any {
 	return nil
 }
 
-func buildInput(messages []modelruntime.Message) ([]map[string]any, error) {
+func buildInput(messages []agent.Message) ([]map[string]any, error) {
 	inputs := make([]map[string]any, 0, len(messages))
 	for _, msg := range messages {
-		if msg.Role == modelruntime.RoleTool {
+		if msg.Role == agent.RoleTool {
 			toolInputs, err := buildToolOutputItems(msg)
 			if err != nil {
 				return nil, err
@@ -191,8 +191,8 @@ func buildInput(messages []modelruntime.Message) ([]map[string]any, error) {
 	return inputs, nil
 }
 
-func wrapNamedMessage(msg modelruntime.Message) modelruntime.Message {
-	if msg.Name == "" || msg.Role == modelruntime.RoleTool {
+func wrapNamedMessage(msg agent.Message) agent.Message {
+	if msg.Name == "" || msg.Role == agent.RoleTool {
 		return msg
 	}
 
@@ -204,25 +204,25 @@ func wrapNamedMessage(msg modelruntime.Message) modelruntime.Message {
 		if strings.TrimSpace(text) == "" {
 			return msg
 		}
-		msg.Parts = []modelruntime.Part{{
-			Type: modelruntime.PartText,
+		msg.Parts = []agent.ContentPart{{
+			Type: agent.ContentPartText,
 			Text: openTag + text + closeTag,
 		}}
 		msg.Name = ""
 		return msg
 	}
 
-	parts := make([]modelruntime.Part, 0, len(msg.Parts)+2)
-	parts = append(parts, modelruntime.Part{Type: modelruntime.PartText, Text: openTag})
+	parts := make([]agent.ContentPart, 0, len(msg.Parts)+2)
+	parts = append(parts, agent.ContentPart{Type: agent.ContentPartText, Text: openTag})
 	parts = append(parts, msg.Parts...)
-	parts = append(parts, modelruntime.Part{Type: modelruntime.PartText, Text: closeTag})
+	parts = append(parts, agent.ContentPart{Type: agent.ContentPartText, Text: closeTag})
 
 	msg.Parts = parts
 	msg.Name = ""
 	return msg
 }
 
-func buildMessageContent(msg modelruntime.Message) any {
+func buildMessageContent(msg agent.Message) any {
 	parts := buildContentParts(msg.Parts, msg.Role)
 	if len(parts) > 0 {
 		return parts
@@ -231,16 +231,16 @@ func buildMessageContent(msg modelruntime.Message) any {
 	if text == "" {
 		return ""
 	}
-	if msg.Role == modelruntime.RoleAssistant {
+	if msg.Role == agent.RoleAssistant {
 		return []map[string]any{{"type": "output_text", "text": text}}
 	}
 	return []map[string]any{{"type": "input_text", "text": text}}
 }
 
-func buildContentParts(parts []modelruntime.Part, role modelruntime.Role) []map[string]any {
+func buildContentParts(parts []agent.ContentPart, role agent.Role) []map[string]any {
 	out := make([]map[string]any, 0, len(parts))
 	textType := "input_text"
-	if role == modelruntime.RoleAssistant {
+	if role == agent.RoleAssistant {
 		textType = "output_text"
 	}
 	for _, part := range parts {
@@ -254,20 +254,19 @@ func buildContentParts(parts []modelruntime.Part, role modelruntime.Role) []map[
 				"text": part.Text,
 			})
 		case "image", "input_image":
-			imageURL := imageURLFromPart(part)
-			if imageURL == "" {
+			if part.URI == "" {
 				continue
 			}
-			if role == modelruntime.RoleAssistant {
+			if role == agent.RoleAssistant {
 				out = append(out, map[string]any{
 					"type": textType,
-					"text": fmt.Sprintf("[image:%s]", imageURL),
+					"text": fmt.Sprintf("[image:%s]", part.URI),
 				})
 				continue
 			}
 			entry := map[string]any{
 				"type":      "input_image",
-				"image_url": imageURL,
+				"image_url": part.URI,
 			}
 			if part.Detail != "" {
 				entry["detail"] = part.Detail
@@ -291,7 +290,7 @@ func buildContentParts(parts []modelruntime.Part, role modelruntime.Role) []map[
 					"type": textType,
 					"text": part.Text,
 				})
-			} else if role == modelruntime.RoleAssistant && part.URI != "" {
+			} else if role == agent.RoleAssistant && part.URI != "" {
 				out = append(out, map[string]any{
 					"type": textType,
 					"text": fmt.Sprintf("[%s:%s]", part.Type, part.URI),
@@ -302,21 +301,7 @@ func buildContentParts(parts []modelruntime.Part, role modelruntime.Role) []map[
 	return out
 }
 
-func imageURLFromPart(part modelruntime.Part) string {
-	if part.URI != "" {
-		return part.URI
-	}
-	if len(part.Data) == 0 {
-		return ""
-	}
-	mimeType := strings.TrimSpace(part.MIMEType)
-	if mimeType == "" {
-		mimeType = "image/png"
-	}
-	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(part.Data)
-}
-
-func buildToolOutputItems(msg modelruntime.Message) ([]map[string]any, error) {
+func buildToolOutputItems(msg agent.Message) ([]map[string]any, error) {
 	if msg.ToolCallID == "" {
 		return nil, fmt.Errorf("tool message missing call id")
 	}
@@ -361,19 +346,19 @@ func buildToolOutputItems(msg modelruntime.Message) ([]map[string]any, error) {
 
 	nonTextParts := filterNonTextParts(msg.Parts)
 	if len(nonTextParts) > 0 {
-		parts := make([]modelruntime.Part, 0, len(nonTextParts)+1)
-		parts = append(parts, modelruntime.Part{Type: modelruntime.PartText, Text: "Tool output:"})
+		parts := make([]agent.ContentPart, 0, len(nonTextParts)+1)
+		parts = append(parts, agent.ContentPart{Type: agent.ContentPartText, Text: "Tool output:"})
 		parts = append(parts, nonTextParts...)
 		items = append(items, map[string]any{
-			"role":    string(modelruntime.RoleUser),
-			"content": buildContentParts(parts, modelruntime.RoleUser),
+			"role":    string(agent.RoleAssistant),
+			"content": buildContentParts(parts, agent.RoleAssistant),
 		})
 	}
 
 	return items, nil
 }
 
-func toolNameFromMessage(msg modelruntime.Message) string {
+func toolNameFromMessage(msg agent.Message) string {
 	if msg.Name != "" {
 		return msg.Name
 	}
@@ -385,24 +370,24 @@ func toolNameFromMessage(msg modelruntime.Message) string {
 	return "tool"
 }
 
-func filterNonTextParts(parts []modelruntime.Part) []modelruntime.Part {
-	out := make([]modelruntime.Part, 0, len(parts))
+func filterNonTextParts(parts []agent.ContentPart) []agent.ContentPart {
+	out := make([]agent.ContentPart, 0, len(parts))
 	for _, part := range parts {
-		if part.Type == modelruntime.PartText {
+		if part.Type == agent.ContentPartText {
 			continue
 		}
 		out = append(out, part)
 	}
 	return out
 }
-func buildTools(defs []modelruntime.ToolDefinition) []map[string]any {
+func buildTools(defs []tool.Definition) []map[string]any {
 	tools := make([]map[string]any, 0, len(defs))
 	for _, def := range defs {
 		var schema json.RawMessage
-		if len(def.JSONSchema) == 0 {
+		if len(def.Schema.JSONSchema) == 0 {
 			schema = json.RawMessage(`{"type":"object","properties":{}}`)
 		} else {
-			schema = json.RawMessage(def.JSONSchema)
+			schema = json.RawMessage(def.Schema.JSONSchema)
 		}
 		tools = append(tools, map[string]any{
 			"type":       "function",

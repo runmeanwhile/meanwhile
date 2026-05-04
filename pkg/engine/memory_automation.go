@@ -12,7 +12,6 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/config"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
 	"github.com/runmeanwhile/meanwhile/pkg/memory"
-	"github.com/runmeanwhile/meanwhile/pkg/modelruntime/compat"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
 
@@ -144,7 +143,7 @@ func (a *engineMemoryAutomator) Capture(ctx context.Context, sess *Session) erro
 
 	resp, err := runProvider(ctx, p, provider.Request{
 		Model:    model,
-		Messages: toRuntimeMessages(messages),
+		Messages: messages,
 		Params:   params,
 	}, a.engine.providerRetryEnabled, a.engine.providerRetryConfig)
 	if err != nil {
@@ -305,7 +304,7 @@ func runProvider(ctx context.Context, p provider.Provider, req provider.Request,
 		case provider.EventMessageDelta:
 			sb.WriteString(ev.Delta)
 		case provider.EventMessageCompleted:
-			final = compat.ToAgentMessage(ev.Message)
+			final = ev.Message
 		case provider.EventError:
 			if ev.Err != nil {
 				return agent.Message{}, ev.Err

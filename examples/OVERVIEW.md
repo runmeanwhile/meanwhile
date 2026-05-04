@@ -1,7 +1,7 @@
 # Meanwhile Examples - Quick Reference
 
 ## Overview
-24 progressive examples demonstrating the Meanwhile framework from basic to advanced.
+23 progressive examples demonstrating the Meanwhile framework from basic to advanced.
 
 ## Quick Start
 
@@ -27,7 +27,6 @@ cd examples/01-single-agent && go run main.go
 - **07-protocol-adversarial**: Debate with judge synthesis
 - **08-protocol-breakout**: Parallel groups + reconvene
 - **09-protocol-as-tool**: Protocols as callable tools
-- **25-protocol-brainstorming-lab**: Context intake + reframing + evidence-gated finalists
 
 ### ⚡ Advanced (10-19)
 - **10-memory-store**: Persistent session history

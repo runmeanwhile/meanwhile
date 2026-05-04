@@ -9,7 +9,6 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/contextpolicy"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
 	"github.com/runmeanwhile/meanwhile/pkg/hook"
-	"github.com/runmeanwhile/meanwhile/pkg/modelruntime/compat"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 	"github.com/runmeanwhile/meanwhile/pkg/telemetry"
@@ -236,8 +235,8 @@ func (s *Session) resumeToolContinuation(ctx context.Context, cont toolContinuat
 		}
 		message, toolCalls, err := s.runProviderStream(spanCtx, p, provider.Request{
 			Model:    model,
-			Messages: toRuntimeMessages(selected),
-			Tools:    compat.FromToolDefinitions(toolDefs),
+			Messages: selected,
+			Tools:    toolDefs,
 			Params:   params,
 		}, cont.Agent.Name, span, false)
 		if err != nil {

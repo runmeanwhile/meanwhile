@@ -9,6 +9,7 @@
 //   - Solo         - Single-agent execution (default)
 //   - Handoff      - Simple delegation from one agent to another
 //   - Brainstorming - Diverge, interact, and vote like a real brainstorm
+//   - BrainstormingLab - Context-aware ideation with reframing + evidence gate
 //   - Adversarial  - Debate with opposing positions
 //   - Consensus    - Convergent collaboration to agreement
 //   - Breakout     - Parallel group work with synthesis

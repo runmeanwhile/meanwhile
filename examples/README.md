@@ -81,6 +81,13 @@ Protocols as tools: wrap any protocol as a callable tool for nested collaboratio
 cd 09-protocol-as-tool && go run main.go
 ```
 
+### [25-protocol-brainstorming-lab](./25-protocol-brainstorming-lab)
+Brainstorming Lab protocol: context intake, reframing, and evidence-gated finalists.
+
+```bash
+cd 25-protocol-brainstorming-lab && go run main.go
+```
+
 ## Advanced Examples
 
 ### [10-memory-store](./10-memory-store)

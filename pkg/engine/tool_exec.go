@@ -10,6 +10,7 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/hook"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
+	"github.com/runmeanwhile/meanwhile/pkg/telemetry"
 	"github.com/runmeanwhile/meanwhile/pkg/tool"
 )
 
@@ -41,6 +42,19 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 			toolCall = modifiedCall
 		}
 
+		toolSpan, toolCtx := s.engine.telemetry.StartSpan(ctx, telemetry.SpanInput{
+			Name:       "tool.run",
+			Attributes: toolCallAttrs(s.id, agentID, toolCall),
+		})
+		finishToolSpan := func(res tool.Result, eventType event.Type, err error) {
+			attrs := toolResultAttrs(s.id, agentID, res, eventType)
+			if err != nil {
+				attrs["error"] = errorString(err)
+			}
+			toolSpan.AddEvent(string(eventType), attrs)
+			toolSpan.End(err)
+		}
+
 		res := tool.Result{ID: toolCall.ID, ToolID: toolCall.ToolID}
 		if len(toolCall.Arguments) > 0 {
 			res.Meta = map[string]any{
@@ -52,7 +66,8 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 			ev := event.New(event.ToolCallError, s.id, map[string]any{"result": res})
 			ev.AgentID = agentID
 			ev.ToolID = toolCall.ToolID
-			_ = s.EmitWithContext(ctx, ev)
+			_ = s.EmitWithContext(toolCtx, ev)
+			finishToolSpan(res, event.ToolCallError, fmt.Errorf("tool not allowed: %s", toolCall.ToolID))
 			results = append(results, res)
 			continue
 		}
@@ -70,7 +85,8 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 			ev := event.New(event.ToolCallError, s.id, map[string]any{"result": res})
 			ev.AgentID = agentID
 			ev.ToolID = toolCall.ToolID
-			_ = s.EmitWithContext(ctx, ev)
+			_ = s.EmitWithContext(toolCtx, ev)
+			finishToolSpan(res, event.ToolCallError, fmt.Errorf("tool not found: %s", toolCall.ToolID))
 			results = append(results, res)
 			continue
 		}
@@ -78,8 +94,9 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 		startEv := event.New(event.ToolCallStarted, s.id, map[string]any{"call": toolCall})
 		startEv.AgentID = agentID
 		startEv.ToolID = toolCall.ToolID
-		_ = s.EmitWithContext(ctx, startEv)
-		out, err := impl.Run(ctx, toolCall, toolEmitter{session: s, toolID: toolCall.ToolID, callID: toolCall.ID, agentID: agentID})
+		_ = s.EmitWithContext(toolCtx, startEv)
+		toolSpan.AddEvent(string(event.ToolCallStarted), toolCallAttrs(s.id, agentID, toolCall))
+		out, err := impl.Run(toolCtx, toolCall, toolEmitter{session: s, toolID: toolCall.ToolID, callID: toolCall.ID, agentID: agentID})
 		var awaiting *protocol.AwaitingInputError
 		if err != nil && errors.As(err, &awaiting) {
 			if out.ID == "" {
@@ -99,9 +116,10 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 				}
 			}
 			res = out
-			decision, modifiedResult, hookErr := s.applyPostToolHooks(ctx, meta, res)
+			decision, modifiedResult, hookErr := s.applyPostToolHooks(toolCtx, meta, res)
 			if hookErr != nil {
-				s.clearPendingRequest(ctx, awaiting.Request.RequestID)
+				s.clearPendingRequest(toolCtx, awaiting.Request.RequestID)
+				finishToolSpan(res, event.ToolCallError, hookErr)
 				return nil, hookErr
 			}
 			if decision == hook.Block {
@@ -113,16 +131,17 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 				res = modifiedResult
 			}
 			if res.Error != nil {
-				s.clearPendingRequest(ctx, awaiting.Request.RequestID)
+				s.clearPendingRequest(toolCtx, awaiting.Request.RequestID)
 				ev := event.New(event.ToolCallError, s.id, map[string]any{"result": res})
 				ev.AgentID = agentID
 				ev.ToolID = toolCall.ToolID
-				_ = s.EmitWithContext(ctx, ev)
+				_ = s.EmitWithContext(toolCtx, ev)
 				toolMsg := toolMessageFromResult(res)
 				msgEv := event.New(event.AgentMessageComplete, s.id, map[string]any{"message": toolMsg})
 				msgEv.AgentID = agentID
 				msgEv.ToolID = toolCall.ToolID
-				_ = s.EmitWithContext(ctx, msgEv)
+				_ = s.EmitWithContext(toolCtx, msgEv)
+				finishToolSpan(res, event.ToolCallError, errors.New(res.Error.Message))
 				results = append(results, res)
 				continue
 			}
@@ -130,12 +149,13 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 			ev := event.New(event.ToolCallCompleted, s.id, map[string]any{"result": res})
 			ev.AgentID = agentID
 			ev.ToolID = toolCall.ToolID
-			_ = s.EmitWithContext(ctx, ev)
+			_ = s.EmitWithContext(toolCtx, ev)
 			toolMsg := toolMessageFromResult(res)
 			msgEv := event.New(event.AgentMessageComplete, s.id, map[string]any{"message": toolMsg})
 			msgEv.AgentID = agentID
 			msgEv.ToolID = toolCall.ToolID
-			_ = s.EmitWithContext(ctx, msgEv)
+			_ = s.EmitWithContext(toolCtx, msgEv)
+			finishToolSpan(res, event.ToolCallCompleted, nil)
 			results = append(results, res)
 			return results, err
 		}
@@ -148,7 +168,8 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 			ev := event.New(event.ToolCallAwaiting, s.id, map[string]any{"request": awaitingTool.Request})
 			ev.AgentID = agentID
 			ev.ToolID = toolCall.ToolID
-			_ = s.EmitWithContext(ctx, ev)
+			_ = s.EmitWithContext(toolCtx, ev)
+			finishToolSpan(res, event.ToolCallAwaiting, err)
 			results = append(results, res)
 			return results, err
 		}
@@ -175,8 +196,9 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 			res = out
 		}
 
-		decision, modifiedResult, err := s.applyPostToolHooks(ctx, meta, res)
+		decision, modifiedResult, err := s.applyPostToolHooks(toolCtx, meta, res)
 		if err != nil {
+			finishToolSpan(res, event.ToolCallError, err)
 			return nil, err
 		}
 		if decision == hook.Block {
@@ -192,18 +214,20 @@ func (s *Session) executeToolCalls(ctx context.Context, agentID string, calls []
 			ev := event.New(event.ToolCallError, s.id, map[string]any{"result": res})
 			ev.AgentID = agentID
 			ev.ToolID = toolCall.ToolID
-			_ = s.EmitWithContext(ctx, ev)
+			_ = s.EmitWithContext(toolCtx, ev)
+			finishToolSpan(res, event.ToolCallError, errors.New(res.Error.Message))
 		} else {
 			ev := event.New(event.ToolCallCompleted, s.id, map[string]any{"result": res})
 			ev.AgentID = agentID
 			ev.ToolID = toolCall.ToolID
-			_ = s.EmitWithContext(ctx, ev)
+			_ = s.EmitWithContext(toolCtx, ev)
+			finishToolSpan(res, event.ToolCallCompleted, nil)
 		}
 		toolMsg := toolMessageFromResult(res)
 		msgEv := event.New(event.AgentMessageComplete, s.id, map[string]any{"message": toolMsg})
 		msgEv.AgentID = agentID
 		msgEv.ToolID = toolCall.ToolID
-		_ = s.EmitWithContext(ctx, msgEv)
+		_ = s.EmitWithContext(toolCtx, msgEv)
 		results = append(results, res)
 	}
 

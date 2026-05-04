@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
@@ -211,7 +212,7 @@ func (m *mockStreamForOutputSchema) Recv() (provider.Event, error) {
 	m.called = true
 	return provider.Event{
 		Type:    provider.EventMessageCompleted,
-		Message: agent.Message{Role: agent.RoleAssistant, Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "test"}}},
+		Message: runtimeTextMessage(modelruntime.RoleAssistant, "test"),
 	}, nil
 }
 

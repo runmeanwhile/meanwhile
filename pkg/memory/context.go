@@ -144,16 +144,26 @@ func BuildConversationContext(
 func extractMessage(ev event.Event) (agent.Message, bool) {
 	// Handle AgentMessageComplete events
 	if ev.Type == event.AgentMessageComplete {
-		if msg, ok := ev.Payload.(agent.Message); ok {
-			return msg, true
+		var msg agent.Message
+		var ok bool
+		if m, isMsg := ev.Payload.(agent.Message); isMsg {
+			msg = m
+			ok = true
+		} else if payload, isMap := ev.Payload.(map[string]any); isMap {
+			if msgData, hasMsg := payload["message"].(map[string]any); hasMsg {
+				msg = agent.MessageFromMap(msgData)
+				ok = true
+			} else if m, hasMsg := payload["message"].(agent.Message); hasMsg {
+				msg = m
+				ok = true
+			}
 		}
-		if payload, ok := ev.Payload.(map[string]any); ok {
-			if msgData, ok := payload["message"].(map[string]any); ok {
-				return agent.MessageFromMap(msgData), true
+		if ok {
+			// Copy agent ID from event to message Name if not already set
+			if msg.Name == "" && ev.AgentID != "" {
+				msg.Name = ev.AgentID
 			}
-			if msg, ok := payload["message"].(agent.Message); ok {
-				return msg, true
-			}
+			return msg, true
 		}
 	}
 
@@ -168,6 +178,17 @@ func extractMessage(ev event.Event) (agent.Message, bool) {
 				if result.Error != nil && !hasPartType(parts, agent.ContentPartText) && result.Error.Message != "" {
 					parts = append(parts, agent.ContentPart{Type: agent.ContentPartText, Text: result.Error.Message})
 				}
+
+				// Add agent attribution to first text part so other agents know who ran the tool
+				if ev.AgentID != "" {
+					for i, p := range parts {
+						if p.Type == agent.ContentPartText && p.Text != "" {
+							parts[i].Text = fmt.Sprintf("[%s's %s result] %s", ev.AgentID, result.ToolID, p.Text)
+							break
+						}
+					}
+				}
+
 				return agent.Message{
 					Role:       agent.RoleTool,
 					Name:       result.ToolID,

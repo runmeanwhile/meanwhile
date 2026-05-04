@@ -683,6 +683,42 @@ func TestExtractMessage(t *testing.T) {
 			t.Error("expected extraction to fail")
 		}
 	})
+
+	t.Run("copies event AgentID to message Name", func(t *testing.T) {
+		ev := event.New(event.AgentMessageComplete, "session", map[string]any{
+			"message": textMessageMap("assistant", "Hello from agent"),
+		})
+		ev.AgentID = "Strategist"
+
+		msg, ok := extractMessage(ev)
+		if !ok {
+			t.Fatal("expected successful extraction")
+		}
+
+		if msg.Name != "Strategist" {
+			t.Errorf("expected Name to be Strategist (from AgentID), got %q", msg.Name)
+		}
+	})
+
+	t.Run("preserves message Name over event AgentID", func(t *testing.T) {
+		ev := event.New(event.AgentMessageComplete, "session", map[string]any{
+			"message": map[string]any{
+				"role": "assistant",
+				"parts": []any{map[string]any{"type": "text", "text": "Hello"}},
+				"name": "OriginalName",
+			},
+		})
+		ev.AgentID = "DifferentAgent"
+
+		msg, ok := extractMessage(ev)
+		if !ok {
+			t.Fatal("expected successful extraction")
+		}
+
+		if msg.Name != "OriginalName" {
+			t.Errorf("expected Name to preserve OriginalName, got %q", msg.Name)
+		}
+	})
 }
 
 func TestParseMessageFromMap(t *testing.T) {

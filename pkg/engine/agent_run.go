@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -15,6 +16,8 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/contextpolicy"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
 	"github.com/runmeanwhile/meanwhile/pkg/hook"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime/compat"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 	"github.com/runmeanwhile/meanwhile/pkg/telemetry"
@@ -39,6 +42,9 @@ var (
 )
 
 const defaultMaxToolIterations = 4
+
+// debugLLMCalls enables verbose logging of LLM requests when MEANWHILE_DEBUG_LLM=1
+var debugLLMCalls = os.Getenv("MEANWHILE_DEBUG_LLM") == "1"
 
 // RunAgent executes an agent against the provider and streams events.
 func (s *Session) RunAgent(ctx context.Context, a agent.Agent, req protocol.RunRequest) (agent.Message, error) {
@@ -158,10 +164,16 @@ func (s *Session) RunAgent(ctx context.Context, a agent.Agent, req protocol.RunR
 			runErr = err
 			return agent.Message{}, err
 		}
+
+		// Debug logging: show exactly what goes to the LLM
+		if debugLLMCalls {
+			debugLogLLMRequest(a.Name, attempt, selected)
+		}
+
 		message, toolCalls, err := s.runProviderStream(spanCtx, p, provider.Request{
 			Model:    model,
-			Messages: selected,
-			Tools:    toolDefs,
+			Messages: toRuntimeMessages(selected),
+			Tools:    compat.FromToolDefinitions(toolDefs),
 			Params:   params,
 		}, a.Name, span, req.Silent)
 		if err != nil {
@@ -267,38 +279,40 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 			})
 			ev.AgentID = agentID
 			emit(ev)
+			span.AddEvent(string(event.AgentMessageDelta), llmEventAttrs(s.id, agentID, event.AgentMessageDelta, provEvent.Delta))
 		case provider.EventReasoningDelta:
 			ev := event.New(event.AgentReasoningDelta, s.id, map[string]any{
 				"delta": provEvent.Delta,
 			})
 			ev.AgentID = agentID
 			emit(ev)
+			span.AddEvent(string(event.AgentReasoningDelta), llmEventAttrs(s.id, agentID, event.AgentReasoningDelta, provEvent.Delta))
 		case provider.EventReasoningSummaryDelta:
 			ev := event.New(event.AgentReasoningSummaryDelta, s.id, map[string]any{
 				"delta": provEvent.Delta,
 			})
 			ev.AgentID = agentID
 			emit(ev)
+			span.AddEvent(string(event.AgentReasoningSummaryDelta), llmEventAttrs(s.id, agentID, event.AgentReasoningSummaryDelta, provEvent.Delta))
 		case provider.EventMessageCompleted:
 			if len(provEvent.Message.Parts) == 0 {
 				text := builder.String()
 				if text != "" {
-					provEvent.Message.Parts = []agent.ContentPart{{Type: agent.ContentPartText, Text: text}}
+					provEvent.Message.Parts = []modelruntime.Part{{Type: modelruntime.PartText, Text: text}}
 				}
 			}
 			if provEvent.Message.Role == "" {
-				provEvent.Message.Role = agent.RoleAssistant
+				provEvent.Message.Role = modelruntime.RoleAssistant
 			}
-			lastMessage = provEvent.Message
+			lastMessage = compat.ToAgentMessage(provEvent.Message)
 			ev := event.New(event.AgentMessageComplete, s.id, map[string]any{
-				"message": provEvent.Message,
+				"message": lastMessage,
 			})
 			ev.AgentID = agentID
 			emit(ev)
+			span.AddEvent(string(event.AgentMessageComplete), messageCompleteAttrs(s.id, agentID, lastMessage))
 		case provider.EventToolCall:
-			span.AddEvent("tool.call", map[string]any{
-				"tool_calls": len(provEvent.ToolCalls),
-			})
+			span.AddEvent(string(provider.EventToolCall), providerToolCallAttrs(s.id, agentID, provEvent.ToolCalls))
 			toolCalls = append(toolCalls, provEvent.ToolCalls...)
 		case provider.EventToolResult:
 			return agent.Message{}, nil, fmt.Errorf("provider tool results are not supported")
@@ -309,6 +323,7 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 				})
 				ev.AgentID = agentID
 				emit(ev)
+				span.AddEvent(string(event.ProviderRawEvent), rawProviderEventAttrs(s.id, agentID, provEvent.Raw))
 			}
 		case provider.EventError:
 			if provEvent.Err != nil {
@@ -326,6 +341,14 @@ func (s *Session) runProviderStream(ctx context.Context, p provider.Provider, re
 	}
 
 	return lastMessage, toolCalls, nil
+}
+
+func toRuntimeMessages(messages []agent.Message) []modelruntime.Message {
+	out := make([]modelruntime.Message, 0, len(messages))
+	for _, message := range messages {
+		out = append(out, compat.FromAgentMessage(message))
+	}
+	return out
 }
 
 func (s *Session) resolveTools(toolIDs []string, policy tool.Policy) ([]tool.Definition, map[string]struct{}, error) {
@@ -654,4 +677,58 @@ func ensureRequiredAllProperties(schema map[string]any, props map[string]any) {
 			return
 		}
 	}
+}
+
+// debugLogLLMRequest logs the full message payload being sent to the LLM.
+// Enable with MEANWHILE_DEBUG_LLM=1
+func debugLogLLMRequest(agentName string, attempt int, messages []agent.Message) {
+	fmt.Fprintf(os.Stderr, "\n╔══════════════════════════════════════════════════════════════════════════════\n")
+	fmt.Fprintf(os.Stderr, "║ LLM REQUEST: Agent=%s, Attempt=%d, Messages=%d\n", agentName, attempt, len(messages))
+	fmt.Fprintf(os.Stderr, "╠══════════════════════════════════════════════════════════════════════════════\n")
+
+	for i, msg := range messages {
+		role := string(msg.Role)
+		name := msg.Name
+		text := msg.Text()
+
+		// Truncate long messages for readability
+		if len(text) > 500 {
+			text = text[:500] + "... [TRUNCATED]"
+		}
+
+		if name != "" {
+			fmt.Fprintf(os.Stderr, "║ [%d] %s (%s):\n", i, role, name)
+		} else {
+			fmt.Fprintf(os.Stderr, "║ [%d] %s:\n", i, role)
+		}
+
+		// Indent message content
+		lines := strings.Split(text, "\n")
+		for _, line := range lines {
+			if len(line) > 100 {
+				line = line[:100] + "..."
+			}
+			fmt.Fprintf(os.Stderr, "║     %s\n", line)
+		}
+
+		// Show parts summary
+		if len(msg.Parts) > 1 || (len(msg.Parts) == 1 && msg.Parts[0].Type != agent.ContentPartText) {
+			fmt.Fprintf(os.Stderr, "║     [%d parts: ", len(msg.Parts))
+			partTypes := make(map[agent.ContentPartType]int)
+			for _, p := range msg.Parts {
+				partTypes[p.Type]++
+			}
+			first := true
+			for pt, count := range partTypes {
+				if !first {
+					fmt.Fprintf(os.Stderr, ", ")
+				}
+				fmt.Fprintf(os.Stderr, "%s=%d", pt, count)
+				first = false
+			}
+			fmt.Fprintf(os.Stderr, "]\n")
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "╚══════════════════════════════════════════════════════════════════════════════\n\n")
 }

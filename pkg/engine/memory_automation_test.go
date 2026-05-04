@@ -10,6 +10,7 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/config"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
 	"github.com/runmeanwhile/meanwhile/pkg/memory"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
@@ -27,7 +28,7 @@ func (p *staticProvider) Stream(_ context.Context, req provider.Request) (provid
 	}
 	return &staticStream{events: []provider.Event{{
 		Type:    provider.EventMessageCompleted,
-		Message: textMessage(agent.RoleAssistant, p.response),
+		Message: runtimeTextMessage(modelruntime.RoleAssistant, p.response),
 	}}}, nil
 }
 

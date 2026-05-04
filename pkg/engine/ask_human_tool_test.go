@@ -10,6 +10,7 @@ import (
 	"github.com/runmeanwhile/meanwhile/pkg/agent"
 	"github.com/runmeanwhile/meanwhile/pkg/event"
 	"github.com/runmeanwhile/meanwhile/pkg/message"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/protocol"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
@@ -91,9 +92,9 @@ func TestAskHumanToolPausesSession(t *testing.T) {
 func TestAskHumanToolOptionalContinues(t *testing.T) {
 	prov := &askHumanProvider{
 		arguments: json.RawMessage(`{"question":"Need your take","participant":"User","required":false}`),
-		message: agent.Message{
-			Role:  agent.RoleAssistant,
-			Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: "done"}},
+		message: modelruntime.Message{
+			Role:  modelruntime.RoleAssistant,
+			Parts: []modelruntime.Part{{Type: modelruntime.PartText, Text: "done"}},
 		},
 	}
 	eng, err := New(WithProvider(prov))
@@ -137,7 +138,7 @@ type askHumanProvider struct {
 	mu        sync.Mutex
 	calls     int
 	arguments json.RawMessage
-	message   agent.Message
+	message   modelruntime.Message
 }
 
 func (p *askHumanProvider) ID() string { return "ask-human-provider" }

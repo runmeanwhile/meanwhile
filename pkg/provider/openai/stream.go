@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-)
 
-import (
-	"github.com/runmeanwhile/meanwhile/pkg/agent"
+	"github.com/runmeanwhile/meanwhile/pkg/modelruntime"
 	"github.com/runmeanwhile/meanwhile/pkg/provider"
 )
 
@@ -73,6 +71,7 @@ type stream struct {
 	body             io.Closer
 	callIDByItemID   map[string]string
 	toolNameByItemID map[string]string
+	emittedToolCalls map[string]struct{} // Track already-emitted tool calls to avoid duplicates
 }
 
 func newStream(body io.ReadCloser) provider.Stream {
@@ -81,6 +80,7 @@ func newStream(body io.ReadCloser) provider.Stream {
 		body:             body,
 		callIDByItemID:   make(map[string]string),
 		toolNameByItemID: make(map[string]string),
+		emittedToolCalls: make(map[string]struct{}),
 	}
 }
 
@@ -193,9 +193,9 @@ func (s *stream) decodeEvent(data []byte) (provider.Event, error) {
 		}
 		return provider.Event{
 			Type: provider.EventMessageCompleted,
-			Message: agent.Message{
-				Role:  agent.RoleAssistant,
-				Parts: []agent.ContentPart{{Type: agent.ContentPartText, Text: payload.Text}},
+			Message: modelruntime.Message{
+				Role:  modelruntime.RoleAssistant,
+				Parts: []modelruntime.Part{{Type: modelruntime.PartText, Text: payload.Text}},
 			},
 		}, nil
 	case "response.function_call_arguments.done":
@@ -213,6 +213,10 @@ func (s *stream) decodeEvent(data []byte) (provider.Event, error) {
 		toolName := payload.Name
 		if toolName == "" {
 			toolName = s.toolNameByItemID[payload.ItemID]
+		}
+		// Track emitted call to avoid duplicates from output_item.done
+		if s.emittedToolCalls != nil {
+			s.emittedToolCalls[callID] = struct{}{}
 		}
 		return provider.Event{
 			Type: provider.EventToolCall,
@@ -242,6 +246,10 @@ func (s *stream) decodeEvent(data []byte) (provider.Event, error) {
 		if err != nil {
 			return provider.Event{}, fmt.Errorf("encode custom tool input: %w", err)
 		}
+		// Track emitted call to avoid duplicates from output_item.done
+		if s.emittedToolCalls != nil {
+			s.emittedToolCalls[callID] = struct{}{}
+		}
 		return provider.Event{
 			Type: provider.EventToolCall,
 			ToolCalls: []provider.ToolCall{{
@@ -267,6 +275,13 @@ func (s *stream) decodeEvent(data []byte) (provider.Event, error) {
 			callID := payload.Item.CallID
 			if callID == "" {
 				callID = payload.Item.ID
+			}
+			// Skip if this call was already emitted via function_call_arguments.done
+			if s.emittedToolCalls != nil {
+				if _, emitted := s.emittedToolCalls[callID]; emitted {
+					return provider.Event{Type: provider.EventRaw, Raw: data}, nil
+				}
+				s.emittedToolCalls[callID] = struct{}{}
 			}
 			return provider.Event{
 				Type: provider.EventToolCall,

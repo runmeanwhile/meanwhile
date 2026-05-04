@@ -15,18 +15,22 @@ func TestBuildMessagesCarriesToolImageOutputAsUserContent(t *testing.T) {
 			{Type: modelruntime.PartText, Text: "Image attached."},
 			{Type: modelruntime.PartImage, URI: "data:image/jpeg;base64,abc123", Detail: "low"},
 		},
+		Metadata: map[string]any{"arguments": `{"question":"look"}`},
 	}
 
 	messages := buildMessages([]modelruntime.Message{msg})
-	if len(messages) != 2 {
-		t.Fatalf("expected tool result and user image attachment, got %d messages", len(messages))
+	if len(messages) != 3 {
+		t.Fatalf("expected assistant tool call, tool result, and user image attachment, got %d messages", len(messages))
 	}
-	if messages[0]["role"] != "tool" || messages[0]["content"] != "Image attached." {
-		t.Fatalf("unexpected tool message: %#v", messages[0])
+	if messages[0]["role"] != "assistant" || messages[0]["tool_calls"] == nil {
+		t.Fatalf("unexpected assistant tool call message: %#v", messages[0])
 	}
-	content, ok := messages[1]["content"].([]map[string]any)
+	if messages[1]["role"] != "tool" || messages[1]["content"] != "Image attached." {
+		t.Fatalf("unexpected tool message: %#v", messages[1])
+	}
+	content, ok := messages[2]["content"].([]map[string]any)
 	if !ok {
-		t.Fatalf("expected multimodal user content, got %T", messages[1]["content"])
+		t.Fatalf("expected multimodal user content, got %T", messages[2]["content"])
 	}
 	if len(content) != 2 {
 		t.Fatalf("expected text and image parts, got %d", len(content))

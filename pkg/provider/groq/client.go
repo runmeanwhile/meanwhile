@@ -134,19 +134,58 @@ func buildMessages(messages []modelruntime.Message) []map[string]any {
 				out = append(out, map[string]any{"role": "assistant", "content": msg.Text()})
 			}
 		case modelruntime.RoleTool:
-			out = append(out, map[string]any{
-				"role":         "tool",
-				"tool_call_id": msg.ToolCallID,
-				"name":         toolName(msg),
-				"content":      msg.Text(),
-			})
-			if parts := nonTextParts(msg.Parts); len(parts) > 0 {
-				parts = append([]modelruntime.Part{{Type: modelruntime.PartText, Text: "Tool output:"}}, parts...)
-				out = append(out, map[string]any{"role": "user", "content": buildContent(parts)})
-			}
+			out = append(out, groqToolExchange(msg)...)
 		}
 	}
 	return out
+}
+
+func groqToolExchange(msg modelruntime.Message) []map[string]any {
+	items := []map[string]any{
+		{
+			"role":    "assistant",
+			"content": nil,
+			"tool_calls": []map[string]any{{
+				"id":   msg.ToolCallID,
+				"type": "function",
+				"function": map[string]any{
+					"name":      toolName(msg),
+					"arguments": toolArguments(msg),
+				},
+			}},
+		},
+		{
+			"role":         "tool",
+			"tool_call_id": msg.ToolCallID,
+			"name":         toolName(msg),
+			"content":      msg.Text(),
+		},
+	}
+	if parts := nonTextParts(msg.Parts); len(parts) > 0 {
+		parts = append([]modelruntime.Part{{Type: modelruntime.PartText, Text: "Tool output:"}}, parts...)
+		items = append(items, map[string]any{"role": "user", "content": buildContent(parts)})
+	}
+	return items
+}
+
+func toolArguments(msg modelruntime.Message) string {
+	if msg.Metadata != nil {
+		switch value := msg.Metadata["arguments"].(type) {
+		case json.RawMessage:
+			if len(value) > 0 {
+				return string(value)
+			}
+		case []byte:
+			if len(value) > 0 {
+				return string(value)
+			}
+		case string:
+			if strings.TrimSpace(value) != "" {
+				return value
+			}
+		}
+	}
+	return "{}"
 }
 
 func buildContent(parts []modelruntime.Part) any {
